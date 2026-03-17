@@ -21,6 +21,9 @@ FreeBSD quarterly может содержать amnezia-kmod, собранный
 **Pre-check не обнаруживал уже сломанный pkg**
 При обновлении с v2.5.0 пакеты уже установлены (`NEED_KMOD=0`), поэтому quarterly-логика пропускалась и `pkg lock` не вызывался. Старый pre-check через `pkg info pkg` проходил даже со сломанным pkg (segfault только при `pkg update`). Теперь pre-check дополнительно проверяет репозиторий происхождения pkg через `pkg-static query '%R' pkg` — если pkg установлен из `FreeBSD-quarterly` вместо `OPNsense`, предлагается автоматический даунгрейд. Также amnezia-kmod теперь блокируется при обновлении плагина, даже если пакеты уже были установлены ранее.
 
+**Зависание sentinel daemon при start/restart/reconfigure**
+PHP `exec()` блокировался навечно при запуске sentinel процесса (`daemon -p pidfile sleep 999999999`). Причина: `daemon(8)` форкает `sleep`, который наследует stdout pipe от PHP exec(). PHP ждёт закрытия всех writers на pipe, но sleep живёт ~31 год. Исправлено добавлением `>/dev/null 2>&1` — перенаправляет вывод в `/dev/null` до fork, поэтому sleep не наследует pipe и exec() возвращается мгновенно.
+
 ---
 
 ## v2.5.0 — 2026-03-08

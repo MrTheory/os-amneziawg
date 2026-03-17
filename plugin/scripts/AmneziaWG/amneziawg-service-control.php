@@ -247,7 +247,9 @@ function awg_start_sentinel(): void
     // Kill any existing sentinel first
     awg_stop_sentinel();
     // FreeBSD sleep does not support "infinity" — use large value (~31 years)
-    exec('/usr/sbin/daemon -p ' . escapeshellarg(AWG_PID_FILE) . ' /bin/sleep 999999999 2>&1', $out, $rc);
+    // Redirect to /dev/null: PHP exec() blocks until ALL pipe writers close,
+    // and daemon's child (sleep) inherits the pipe, causing exec() to hang forever.
+    exec('/usr/sbin/daemon -p ' . escapeshellarg(AWG_PID_FILE) . ' /bin/sleep 999999999 >/dev/null 2>&1', $out, $rc);
     if ($rc !== 0) {
         awg_log('WARNING: failed to start sentinel daemon rc=' . $rc . ': ' . implode(' ', $out));
     } else {
