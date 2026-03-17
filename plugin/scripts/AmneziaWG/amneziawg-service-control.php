@@ -21,6 +21,22 @@ function awg_check_binaries(): bool
     return true;
 }
 
+// Check that if_amn kernel module is loaded; attempt kldload if not
+function awg_check_kmod(): bool
+{
+    exec('/sbin/kldstat -q -m if_amn 2>/dev/null', $out, $rc);
+    if ($rc !== 0) {
+        awg_log('WARNING: if_amn kernel module not loaded, attempting kldload...');
+        exec('/sbin/kldload if_amn 2>&1', $loadOut, $loadRc);
+        if ($loadRc !== 0) {
+            awg_log('ERROR: failed to load if_amn kernel module: ' . implode(' ', $loadOut));
+            return false;
+        }
+        awg_log('if_amn kernel module loaded successfully');
+    }
+    return true;
+}
+
 define('AWG_PRIVKEY_FILE', '/usr/local/etc/amnezia/private.key');
 define('AWG_PRIVKEY_SENTINEL', '::file::');
 define('AWG_VERSION_FILE', '/usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt');
@@ -148,7 +164,7 @@ function awg_write_conf(array $inst): string
 function awg_log(string $msg): void
 {
     $ts = date('Y-m-d H:i:s');
-    file_put_contents('/var/log/amneziawg.log', "[$ts] $msg\n", FILE_APPEND);
+    @file_put_contents('/var/log/amneziawg.log', "[$ts] $msg\n", FILE_APPEND | LOCK_EX);
 }
 
 /**
@@ -412,6 +428,10 @@ switch ($action) {
             echo "ERROR: awg/awg-quick binaries not found. Install amnezia-tools package.\n";
             break;
         }
+        if (!awg_check_kmod()) {
+            echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
+            break;
+        }
         // Remove stopped flag so watchdog can monitor
         if (file_exists(AWG_STOPPED_FLAG)) {
             unlink(AWG_STOPPED_FLAG);
@@ -422,7 +442,9 @@ switch ($action) {
 
     case 'stop':
         // Set stopped flag so watchdog doesn't auto-restart
-        file_put_contents(AWG_STOPPED_FLAG, (string)getmypid());
+        if (file_put_contents(AWG_STOPPED_FLAG, (string)getmypid()) === false) {
+            awg_log('WARNING: failed to write stopped flag');
+        }
         awg_stop_all();
         echo "OK\n";
         break;
@@ -430,6 +452,10 @@ switch ($action) {
     case 'restart':
         if (!awg_check_binaries()) {
             echo "ERROR: awg/awg-quick binaries not found. Install amnezia-tools package.\n";
+            break;
+        }
+        if (!awg_check_kmod()) {
+            echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
         // Remove stopped flag so watchdog can monitor
@@ -444,6 +470,10 @@ switch ($action) {
     case 'reconfigure':
         if (!awg_check_binaries()) {
             echo "ERROR: awg/awg-quick binaries not found. Install amnezia-tools package.\n";
+            break;
+        }
+        if (!awg_check_kmod()) {
+            echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
         awg_stop_all();
@@ -510,6 +540,10 @@ switch ($action) {
     case 'validate':
         if (!awg_check_binaries()) {
             echo "ERROR: awg/awg-quick binaries not found.\n";
+            break;
+        }
+        if (!awg_check_kmod()) {
+            echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
         $instances = awg_get_instances();

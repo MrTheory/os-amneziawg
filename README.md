@@ -1,6 +1,6 @@
 # os-amneziawg
 
-**AmneziaWG VPN plugin for OPNsense** — v2.5.0
+**AmneziaWG VPN plugin for OPNsense** — v2.6.0
 
 AmneziaWG — обфусцированный форк WireGuard для обхода DPI-блокировок. Этот плагин добавляет AmneziaWG в OPNsense как нативный VPN-клиент с поддержкой селективной маршрутизации.
 
@@ -59,10 +59,14 @@ sh install.sh
 ```
 
 Скрипт автоматически:
+- проверит целостность `pkg` — если был обновлён из FreeBSD quarterly, предложит восстановить
 - покажет текущую и новую версию плагина и запросит подтверждение
 - проверит наличие `awg` и модуля ядра `if_amn`
 - предложит установить недостающие пакеты из FreeBSD quarterly repo (`[Y/n]`)
+- заблокирует `pkg` от самообновления на время установки из quarterly
+- проверит совместимость модуля ядра с версией FreeBSD (ABI check)
 - создаст временный repo-конфиг, установит пакеты, удалит конфиг
+- заблокирует `amnezia-kmod` от случайного обновления (`pkg lock`)
 - загрузит модуль ядра и пропишет его в `/boot/loader.conf`
 - скопирует файлы плагина
 - установит конфиг ротации лога newsyslog
@@ -170,6 +174,48 @@ cat /usr/local/etc/amnezia/awg0.conf
 ifconfig -a | grep awg
 ```
 
+### `pkg update` падает с Segmentation fault
+
+Если после установки плагина `pkg update` завершается с `Segmentation fault` — это значит, что `pkg` был обновлён из FreeBSD quarterly repo до несовместимой с OPNsense версии.
+
+**Автоматическое исправление:** переустановите плагин — `sh install.sh` обнаружит проблему и предложит восстановить `pkg`.
+
+**Ручное исправление:**
+```bash
+pkg-static install -f pkg       # восстановить pkg из репозитория OPNsense
+pkg-static update -f             # обновить каталоги
+pkg lock amnezia-kmod            # заблокировать kmod от случайного обновления
+```
+
+### Kernel panic / случайные ребуты после установки
+
+Модуль ядра `amnezia-kmod` из FreeBSD quarterly может быть собран для другой версии FreeBSD, чем использует OPNsense. Это вызывает kernel panic.
+
+```bash
+# Проверить версию ядра
+uname -r
+
+# Проверить из какого репозитория установлен kmod
+pkg query '%R' amnezia-kmod
+
+# Если версии не совпадают — удалить и переустановить
+pkg unlock amnezia-kmod
+pkg delete amnezia-kmod
+# Установить совместимую версию или дождаться обновления пакета
+```
+
+### Зависание при загрузке на "Configuring AmneziaWG"
+
+Если модуль ядра `if_amn` не загружается (несовместимость с ядром), boot hook может зависнуть. В v2.6.0+ добавлена проверка: если `kldload if_amn` не удаётся — запуск туннеля пропускается без зависания.
+
+```bash
+# Проверить лог загрузки
+cat /tmp/amneziawg_syshook.log
+
+# Если видите "FATAL: cannot load if_amn" — модуль несовместим с ядром
+# Переустановите amnezia-kmod или дождитесь обновления
+```
+
 ### Туннель не поднимается
 
 ```bash
@@ -180,6 +226,7 @@ php /usr/local/opnsense/scripts/AmneziaWG/amneziawg-service-control.php reconfig
 | Ошибка в логе | Причина | Решение |
 |---|---|---|
 | `ERROR: binary not found` | awg/awg-quick не установлены | Запусти `install.sh` заново |
+| `ERROR: if_amn kernel module not available` | Модуль ядра не загружается | Переустанови amnezia-kmod, проверь `kldload if_amn` |
 | `ERROR: private key file not found` | Файл ключа отсутствует | Сгенерируй keypair в GUI |
 | `up awg0 rc=1` | Ошибка конфига или модуль не загружен | Проверь `kldstat`, проверь конфиг |
 | `SKIP: another instance` | Lock занят параллельным процессом | Подожди или удали `/var/run/amneziawg.lock` |
@@ -282,7 +329,7 @@ tail -f /var/log/amneziawg.log         # мониторинг лога в реа
 sh install.sh uninstall
 ```
 
-> При удалении директория `/usr/local/etc/amnezia/` (включая `private.key` и `.conf` файлы) удаляется автоматически.
+> При удалении: предлагается удалить пакеты `amnezia-kmod` и `amnezia-tools`, очищается запись `if_amn_load` из `/boot/loader.conf`. Директория `/usr/local/etc/amnezia/` (включая `private.key` и `.conf` файлы) удаляется автоматически.
 
 ---
 

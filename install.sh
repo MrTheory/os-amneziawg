@@ -9,7 +9,7 @@
 set -e
 set -u
 
-PLUGIN_VERSION="2.5.0"
+PLUGIN_VERSION="2.6.0"
 PLUGIN_DIR="$(dirname "$0")/plugin"
 VERSION_FILE="/usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt"
 
@@ -25,6 +25,26 @@ die()  { echo "[ERROR] $*" >&2; exit 1; }
 if [ "${1:-}" = "uninstall" ]; then
     echo "==> Stopping AmneziaWG..."
     /usr/local/opnsense/scripts/AmneziaWG/amneziawg-service-control.php stop 2>/dev/null || true
+
+    # Unlock amnezia-kmod if locked (we lock it during install to prevent accidental upgrade)
+    pkg unlock -qy amnezia-kmod 2>/dev/null || true
+
+    # Offer to remove amnezia packages
+    if pkg info amnezia-kmod >/dev/null 2>&1 || pkg info amnezia-tools >/dev/null 2>&1; then
+        echo ""
+        printf "  Remove amnezia-kmod and amnezia-tools packages? [y/N] "
+        read -r _RP < /dev/tty 2>/dev/null || _RP="n"
+        case "$_RP" in
+            [yY]*)
+                pkg delete -y amnezia-tools 2>/dev/null || true
+                pkg delete -y amnezia-kmod 2>/dev/null || true
+                sed -i '' '/^if_amn_load/d' /boot/loader.conf 2>/dev/null || true
+                echo "[OK]  Packages removed"
+                ;;
+            *) echo "  Keeping packages." ;;
+        esac
+        echo ""
+    fi
 
     echo "==> Removing plugin files..."
     rm -f  /usr/local/opnsense/scripts/AmneziaWG/amneziawg-service-control.php
@@ -141,6 +161,77 @@ cleanup_freebsd_repo() {
     fi
 }
 
+# Check if amnezia-kmod ABI matches the running kernel (prevents kernel panics)
+check_kernel_compat() {
+    KERN_VER=$(uname -r | sed 's/\([0-9]*\.[0-9]*\).*/\1/')
+    DRY_OUT=$(pkg install -n -r FreeBSD-quarterly amnezia-kmod 2>&1 || true)
+    if echo "$DRY_OUT" | grep -qi "ABI.*change\|wrong ABI\|incompatible\|not compatible"; then
+        echo ""
+        warn "ABI MISMATCH: amnezia-kmod may be built for a different FreeBSD version!"
+        warn "Running kernel: FreeBSD $KERN_VER"
+        warn "Installing incompatible kmod may cause kernel panics and reboots."
+        echo ""
+        printf "  Continue anyway? [y/N] "
+        read -r _KM < /dev/tty 2>/dev/null || _KM="n"
+        case "$_KM" in [yY]*) return 0 ;; *) return 1 ;; esac
+    fi
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PKG INTEGRITY PRE-CHECK
+# If pkg was previously corrupted (e.g. upgraded from quarterly repo),
+# detect and offer automatic recovery before proceeding.
+# Checks: 1) pkg info works, 2) pkg not replaced by FreeBSD quarterly version
+# ─────────────────────────────────────────────────────────────────────────────
+echo "==> Pre-check: Verifying pkg integrity..."
+
+pkg_recover() {
+    printf "  Attempt automatic recovery? [Y/n] "
+    read -r _RECOV < /dev/tty 2>/dev/null || _RECOV="y"
+    case "$_RECOV" in
+        [nN]*) die "Fix pkg manually: pkg-static install -f pkg && pkg-static update -f" ;;
+        *)
+            echo "  Reinstalling pkg from OPNsense repo..."
+            if pkg-static install -fy pkg 2>/dev/null; then
+                echo "[OK]  pkg restored"
+                pkg-static update -f 2>/dev/null || warn "pkg update failed"
+            else
+                die "Recovery failed. Run manually: pkg-static install -f pkg"
+            fi
+            ;;
+    esac
+}
+
+PKG_NEEDS_FIX=0
+
+# Check 1: can pkg query itself at all?
+if ! pkg info pkg >/dev/null 2>&1; then
+    warn "pkg appears broken (cannot query package database)."
+    PKG_NEEDS_FIX=1
+fi
+
+# Check 2: was pkg replaced by a FreeBSD (non-OPNsense) version?
+# On OPNsense, pkg should come from the "OPNsense" repo. If it came from
+# "FreeBSD" or "FreeBSD-quarterly", it's incompatible and causes segfaults.
+if [ "$PKG_NEEDS_FIX" = "0" ]; then
+    _PKG_REPO=$(pkg-static query '%R' pkg 2>/dev/null || echo "")
+    if [ -n "$_PKG_REPO" ] && ! echo "$_PKG_REPO" | grep -qi "OPNsense"; then
+        _PKG_VER=$(pkg-static query '%v' pkg 2>/dev/null || echo "unknown")
+        warn "pkg v${_PKG_VER} was installed from '${_PKG_REPO}' repo instead of OPNsense!"
+        warn "This is known to cause segfaults in pkg update."
+        PKG_NEEDS_FIX=1
+    fi
+fi
+
+if [ "$PKG_NEEDS_FIX" = "1" ]; then
+    echo ""
+    pkg_recover
+else
+    echo "[OK]  pkg is healthy"
+fi
+
+echo ""
 echo "==> Step 1: Checking AmneziaWG packages..."
 
 NEED_KMOD=0
@@ -174,18 +265,38 @@ if [ "$NEED_KMOD" = "1" ] || [ "$NEED_TOOLS" = "1" ]; then
             ;;
         *)
             setup_freebsd_repo
+
+            # Lock pkg to prevent self-upgrade from quarterly repo (causes segfault)
+            PKG_LOCKED_BY_US=0
+            if pkg lock -qy pkg 2>/dev/null; then
+                PKG_LOCKED_BY_US=1
+                echo "[OK]  pkg locked (preventing self-upgrade from quarterly)"
+            fi
+
             pkg update -r FreeBSD-quarterly 2>/dev/null || warn "pkg update failed — trying install anyway"
 
             if [ "$NEED_KMOD" = "1" ]; then
-                echo "  Installing amnezia-kmod..."
-                if pkg install -y -r FreeBSD-quarterly amnezia-kmod 2>/dev/null; then
-                    echo "[OK]  amnezia-kmod installed"
-                    kldload if_amn 2>/dev/null || true
-                    grep -q 'if_amn_load' /boot/loader.conf 2>/dev/null || \
-                        echo 'if_amn_load="YES"' >> /boot/loader.conf
-                else
-                    warn "Failed to install amnezia-kmod via pkg."
-                    echo "       Try manually: pkg add <URL from pkg.freebsd.org>"
+                # Check kernel compatibility before installing kmod
+                KMOD_COMPAT=1
+                if ! check_kernel_compat; then
+                    warn "Skipping amnezia-kmod install due to ABI mismatch."
+                    KMOD_COMPAT=0
+                fi
+
+                if [ "$KMOD_COMPAT" = "1" ]; then
+                    echo "  Installing amnezia-kmod..."
+                    if pkg install -y -r FreeBSD-quarterly amnezia-kmod 2>/dev/null; then
+                        echo "[OK]  amnezia-kmod installed"
+                        # Lock kmod to prevent accidental upgrade by future pkg operations
+                        pkg lock -qy amnezia-kmod 2>/dev/null && \
+                            echo "[OK]  amnezia-kmod locked (prevents accidental upgrade)" || true
+                        kldload if_amn 2>/dev/null || true
+                        grep -q 'if_amn_load' /boot/loader.conf 2>/dev/null || \
+                            echo 'if_amn_load="YES"' >> /boot/loader.conf
+                    else
+                        warn "Failed to install amnezia-kmod via pkg."
+                        echo "       Try manually: pkg add <URL from pkg.freebsd.org>"
+                    fi
                 fi
             fi
 
@@ -200,11 +311,36 @@ if [ "$NEED_KMOD" = "1" ] || [ "$NEED_TOOLS" = "1" ]; then
             fi
 
             cleanup_freebsd_repo
+
+            # Unlock pkg if we locked it
+            if [ "$PKG_LOCKED_BY_US" = "1" ]; then
+                pkg unlock -qy pkg 2>/dev/null || true
+            fi
+
+            # Post-install: verify pkg wasn't corrupted despite the lock
+            if ! pkg info pkg >/dev/null 2>&1; then
+                warn "pkg was corrupted during installation — restoring..."
+                pkg-static install -fy pkg 2>/dev/null || true
+                pkg-static update -f 2>/dev/null || true
+                if pkg info pkg >/dev/null 2>&1; then
+                    echo "[OK]  pkg restored automatically"
+                else
+                    warn "Could not auto-restore pkg. Run: pkg-static install -f pkg"
+                fi
+            fi
             ;;
     esac
 else
     echo "[OK]  awg: $(awg --version 2>/dev/null || echo 'installed')"
     echo "[OK]  if_amn kernel module loaded"
+    # Ensure kmod is locked even if it was installed by a previous version of this script
+    if pkg info amnezia-kmod >/dev/null 2>&1; then
+        _KMOD_LOCKED=$(pkg query '%k' amnezia-kmod 2>/dev/null || echo "0")
+        if [ "$_KMOD_LOCKED" != "1" ]; then
+            pkg lock -qy amnezia-kmod 2>/dev/null && \
+                echo "[OK]  amnezia-kmod locked (prevents accidental upgrade)" || true
+        fi
+    fi
 fi
 
 # Final binary check
@@ -385,6 +521,28 @@ install -m 0755 "$PLUGIN_DIR/etc/rc.syshook.d/start/50-amneziawg" \
                 /usr/local/etc/rc.syshook.d/start/
 
 echo "[OK]  Plugin files installed."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PORT CHECK (LOW-5)
+# Warn if the configured listen port is already in use by another service
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -x /usr/local/bin/php ]; then
+    _LISTEN_PORT=$(/usr/local/bin/php -r '
+        set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path());
+        @include_once("config.inc");
+        try {
+            $cfg = OPNsense\Core\Config::getInstance()->object();
+            echo (string)($cfg->OPNsense->amneziawg->instance->listen_port ?? "");
+        } catch (Exception $e) { echo ""; }
+    ' 2>/dev/null || echo "")
+    if [ -n "$_LISTEN_PORT" ] && [ "$_LISTEN_PORT" -gt 0 ] 2>/dev/null; then
+        if sockstat -l -P udp 2>/dev/null | grep -q ":${_LISTEN_PORT} " 2>/dev/null; then
+            echo ""
+            warn "UDP port ${_LISTEN_PORT} is already in use!"
+            warn "AmneziaWG may fail to start. Check: sockstat -l -P udp | grep ${_LISTEN_PORT}"
+        fi
+    fi
+fi
 
 echo ""
 echo "==> Step 4: Restarting configd..."

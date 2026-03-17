@@ -30,6 +30,14 @@ if (file_exists(AWG_STOPPED_FLAG)) {
     exit(0);
 }
 
+// 2.5 Check kernel module is available (prevents restart loop on kmod mismatch)
+exec('/sbin/kldstat -q -m if_amn 2>/dev/null', $_, $kmodRc);
+if ($kmodRc !== 0) {
+    wdg_log('if_amn kernel module not loaded — cannot restart tunnel');
+    echo "OK\n";
+    exit(0);
+}
+
 // 3. Check if service is enabled at all
 $serviceEnabled = (string)($config->OPNsense->amneziawg->general->enabled ?? '0');
 if ($serviceEnabled !== '1') {

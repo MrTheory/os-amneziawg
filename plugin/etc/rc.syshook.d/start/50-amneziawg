@@ -23,6 +23,15 @@ echo "enabled=[$ENABLED]"
 [ -x "$AWG_QUICK" ]  || { echo "awg-quick binary not found"; exit 0; }
 [ -f "$SERVICE_CONTROL" ] || { echo "service-control not found"; exit 0; }
 
+# Verify kernel module before starting tunnel (prevents boot hang on kmod mismatch)
+if ! kldstat -q -m if_amn 2>/dev/null; then
+    echo "if_amn module not loaded, attempting kldload..."
+    if ! kldload if_amn 2>&1; then
+        echo "FATAL: cannot load if_amn — skipping tunnel start (kernel/module version mismatch?)"
+        exit 0
+    fi
+fi
+
 echo "starting amneziawg via service-control..."
 php "$SERVICE_CONTROL" start 2>&1
 
