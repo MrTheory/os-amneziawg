@@ -93,6 +93,21 @@
             <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
             <ValidationMessage>H4 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
         </h4>
+        <i1 type="TextField">
+            <Required>N</Required>
+        </i1>
+        <i2 type="TextField">
+            <Required>N</Required>
+        </i2>
+        <i3 type="TextField">
+            <Required>N</Required>
+        </i3>
+        <i4 type="TextField">
+            <Required>N</Required>
+        </i4>
+        <i5 type="TextField">
+            <Required>N</Required>
+        </i5>
         <peer_public_key type="TextField">
             <Required>Y</Required>
             <ValidationMessage>Peer public key must be a valid Base64 WireGuard key (44 characters ending with =)</ValidationMessage>

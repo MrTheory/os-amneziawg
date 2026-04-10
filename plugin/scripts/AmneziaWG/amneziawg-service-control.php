@@ -77,6 +77,11 @@ function awg_get_instances(): array
         'h2'                        => (string)($inst->h2                        ?? ''),
         'h3'                        => (string)($inst->h3                        ?? ''),
         'h4'                        => (string)($inst->h4                        ?? ''),
+        'i1'                        => (string)($inst->i1                        ?? ''),
+        'i2'                        => (string)($inst->i2                        ?? ''),
+        'i3'                        => (string)($inst->i3                        ?? ''),
+        'i4'                        => (string)($inst->i4                        ?? ''),
+        'i5'                        => (string)($inst->i5                        ?? ''),
         'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
         'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
         'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
@@ -108,7 +113,8 @@ function awg_write_conf(array $inst): string
     }
     // Obfuscation parameters
     $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2',
-            'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4'];
+            'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4',
+            'i1'=>'I1','i2'=>'I2','i3'=>'I3','i4'=>'I4','i5'=>'I5'];
     // Validate H1-H4: must be >= 5 and ranges must not overlap
     // Supports single values (e.g. "12345") and ranges (e.g. "12345-67890")
     $hRanges = [];

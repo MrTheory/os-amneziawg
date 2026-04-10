@@ -161,6 +161,7 @@
                 if (data.status === 'ok') {
                     var fields = ['private_key','address','dns','mtu',
                                   'jc','jmin','jmax','s1','s2','h1','h2','h3','h4',
+                                  'i1','i2','i3','i4','i5',
                                   'peer_public_key','peer_preshared_key','peer_endpoint',
                                   'peer_allowed_ips','peer_persistent_keepalive'];
                     fields.forEach(function (f) {

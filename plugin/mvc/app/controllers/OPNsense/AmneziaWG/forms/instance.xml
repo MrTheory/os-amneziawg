@@ -112,6 +112,40 @@
     </field>
     <field>
         <type>header</type>
+        <label>CPS (Custom Protocol Signature)</label>
+    </field>
+    <field>
+        <id>instance.i1</id>
+        <label>I1</label>
+        <type>text</type>
+        <help>CPS init packet template using tags: &lt;b 0xHEX&gt; &lt;r N&gt; &lt;rd N&gt; &lt;rc N&gt; &lt;t&gt; &lt;c&gt;. From server config.</help>
+    </field>
+    <field>
+        <id>instance.i2</id>
+        <label>I2</label>
+        <type>text</type>
+        <help>CPS packet 2 template. Ignored if I1 is empty. From server config.</help>
+    </field>
+    <field>
+        <id>instance.i3</id>
+        <label>I3</label>
+        <type>text</type>
+        <help>CPS packet 3 template. Ignored if I1 is empty. From server config.</help>
+    </field>
+    <field>
+        <id>instance.i4</id>
+        <label>I4</label>
+        <type>text</type>
+        <help>CPS packet 4 template. Ignored if I1 is empty. From server config.</help>
+    </field>
+    <field>
+        <id>instance.i5</id>
+        <label>I5</label>
+        <type>text</type>
+        <help>CPS packet 5 template. Ignored if I1 is empty. From server config.</help>
+    </field>
+    <field>
+        <type>header</type>
         <label>Peer (Server)</label>
     </field>
     <field>

@@ -39,6 +39,7 @@ class ImportController extends ApiControllerBase
             'jc' => '', 'jmin' => '', 'jmax' => '',
             's1' => '', 's2' => '',
             'h1' => '', 'h2' => '', 'h3' => '', 'h4' => '',
+            'i1' => '', 'i2' => '', 'i3' => '', 'i4' => '', 'i5' => '',
             'peer_public_key' => '', 'peer_preshared_key' => '',
             'peer_endpoint' => '', 'peer_allowed_ips' => '',
             'peer_persistent_keepalive' => '',
@@ -71,9 +72,14 @@ class ImportController extends ApiControllerBase
                     'jc' => 'jc', 'jmin' => 'jmin', 'jmax' => 'jmax',
                     's1' => 's1', 's2' => 's2',
                     'h1' => 'h1', 'h2' => 'h2', 'h3' => 'h3', 'h4' => 'h4',
+                    'i1' => 'i1', 'i2' => 'i2', 'i3' => 'i3', 'i4' => 'i4', 'i5' => 'i5',
                 ];
                 if (isset($map[$k])) {
-                    $data[$map[$k]] = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    // I1-I5 CPS tags contain angle brackets (e.g. <b 0xd1><r 50>)
+                    // — do not HTML-encode; response is JSON consumed via .val()
+                    $data[$map[$k]] = in_array($map[$k], ['i1','i2','i3','i4','i5'], true)
+                        ? $value
+                        : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 }
             } elseif ($section === 'peer') {
                 $map = [
