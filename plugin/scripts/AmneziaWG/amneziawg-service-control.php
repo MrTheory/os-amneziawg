@@ -109,20 +109,39 @@ function awg_write_conf(array $inst): string
     // Obfuscation parameters
     $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2',
             'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4'];
-    // Validate H1-H4: must be >= 5 and must not intersect each other
-    $hVals = [];
+    // Validate H1-H4: must be >= 5 and ranges must not overlap
+    // Supports single values (e.g. "12345") and ranges (e.g. "12345-67890")
+    $hRanges = [];
     foreach (['h1','h2','h3','h4'] as $hk) {
-        $hv = (int)($inst[$hk] ?? 0);
-        if ($hv > 0 && $hv < 5) {
-            awg_log("WARNING: {$hk}={$hv} is invalid (must be >= 5, values 1-4 reserved). Skipping {$hk}.");
+        $raw = trim($inst[$hk] ?? '');
+        if ($raw === '') {
+            continue;
+        }
+        if (!preg_match('/^\d{1,10}(-\d{1,10})?$/', $raw)) {
+            awg_log("WARNING: {$hk}={$raw} has invalid format. Skipping {$hk}.");
             $inst[$hk] = '';
-        } elseif ($hv >= 5) {
-            if (in_array($hv, $hVals, true)) {
-                awg_log("WARNING: {$hk}={$hv} duplicates another H parameter. Skipping {$hk}.");
+            continue;
+        }
+        $parts = explode('-', $raw, 2);
+        $low  = (float)$parts[0];
+        $high = isset($parts[1]) ? (float)$parts[1] : $low;
+        if ($low < 5 || $high < 5 || $low > 4294967295 || $high > 4294967295 || $high < $low) {
+            awg_log("WARNING: {$hk}={$raw} is invalid (values must be 5-4294967295, start <= end). Skipping {$hk}.");
+            $inst[$hk] = '';
+            continue;
+        }
+        // Check overlap with previously validated H ranges
+        $overlap = false;
+        foreach ($hRanges as $prev => [$pLow, $pHigh]) {
+            if ($low <= $pHigh && $pLow <= $high) {
+                awg_log("WARNING: {$hk}={$raw} overlaps with {$prev}. Skipping {$hk}.");
                 $inst[$hk] = '';
-            } else {
-                $hVals[] = $hv;
+                $overlap = true;
+                break;
             }
+        }
+        if (!$overlap) {
+            $hRanges[$hk] = [$low, $high];
         }
     }
     foreach ($obf as $k => $label) {

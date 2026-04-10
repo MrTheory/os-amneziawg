@@ -73,29 +73,25 @@
             <MinimumValue>0</MinimumValue>
             <MaximumValue>1280</MaximumValue>
         </s2>
-        <h1 type="IntegerField">
+        <h1 type="TextField">
             <Required>N</Required>
-            <MinimumValue>5</MinimumValue>
-            <MaximumValue>4294967295</MaximumValue>
-            <ValidationMessage>H1 must be in range 5-4294967295 (values 1-4 are reserved)</ValidationMessage>
+            <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
+            <ValidationMessage>H1 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
         </h1>
-        <h2 type="IntegerField">
+        <h2 type="TextField">
             <Required>N</Required>
-            <MinimumValue>5</MinimumValue>
-            <MaximumValue>4294967295</MaximumValue>
-            <ValidationMessage>H2 must be in range 5-4294967295 (values 1-4 are reserved)</ValidationMessage>
+            <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
+            <ValidationMessage>H2 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
         </h2>
-        <h3 type="IntegerField">
+        <h3 type="TextField">
             <Required>N</Required>
-            <MinimumValue>5</MinimumValue>
-            <MaximumValue>4294967295</MaximumValue>
-            <ValidationMessage>H3 must be in range 5-4294967295 (values 1-4 are reserved)</ValidationMessage>
+            <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
+            <ValidationMessage>H3 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
         </h3>
-        <h4 type="IntegerField">
+        <h4 type="TextField">
             <Required>N</Required>
-            <MinimumValue>5</MinimumValue>
-            <MaximumValue>4294967295</MaximumValue>
-            <ValidationMessage>H4 must be in range 5-4294967295 (values 1-4 are reserved)</ValidationMessage>
+            <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
+            <ValidationMessage>H4 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
         </h4>
         <peer_public_key type="TextField">
             <Required>Y</Required>

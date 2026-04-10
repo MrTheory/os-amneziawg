@@ -90,25 +90,25 @@
         <id>instance.h1</id>
         <label>H1</label>
         <type>text</type>
-        <help>Header ID for init packets (5-4294967295). Must differ from H2/H3/H4. From server config.</help>
+        <help>Header ID for init packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H2/H3/H4. From server config.</help>
     </field>
     <field>
         <id>instance.h2</id>
         <label>H2</label>
         <type>text</type>
-        <help>Header ID for response packets (5-4294967295). Must differ from H1/H3/H4. From server config.</help>
+        <help>Header ID for response packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H3/H4. From server config.</help>
     </field>
     <field>
         <id>instance.h3</id>
         <label>H3</label>
         <type>text</type>
-        <help>Header ID for cookie packets (5-4294967295). Must differ from H1/H2/H4. From server config.</help>
+        <help>Header ID for cookie packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H4. From server config.</help>
     </field>
     <field>
         <id>instance.h4</id>
         <label>H4</label>
         <type>text</type>
-        <help>Header ID for data packets (5-4294967295). Must differ from H1/H2/H3. From server config.</help>
+        <help>Header ID for data packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H3. From server config.</help>
     </field>
     <field>
         <type>header</type>
