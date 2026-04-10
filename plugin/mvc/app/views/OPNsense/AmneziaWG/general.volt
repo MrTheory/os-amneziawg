@@ -1,6 +1,27 @@
 <script>
     $(document).ready(function () {
 
+        // ── I1-I5 CPS fields contain angle brackets that get HTML-encoded
+        // by the framework. Decode entities in these fields after form load.
+        function decodeIFields() {
+            var el = document.createElement('textarea');
+            ['i1','i2','i3','i4','i5'].forEach(function (f) {
+                var $input = $('[id="instance.' + f + '"]');
+                var v = $input.val();
+                if (v && (v.indexOf('&') !== -1)) {
+                    // Decode repeatedly until stable (handles multi-level encoding)
+                    var prev = v;
+                    while (true) {
+                        el.innerHTML = prev;
+                        var decoded = el.value;
+                        if (decoded === prev) break;
+                        prev = decoded;
+                    }
+                    $input.val(prev);
+                }
+            });
+        }
+
         // ── Load forms ────────────────────────────────────────────────
         mapDataToFormUI({'frm_general_settings': "/api/amneziawg/general/get"}).done(function () {
             formatTokenizersUI();
@@ -10,6 +31,7 @@
         mapDataToFormUI({'frm_instance_settings': "/api/amneziawg/instance/get"}).done(function () {
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
+            decodeIFields();
         });
 
         // ── Apply ─────────────────────────────────────────────────────
@@ -169,6 +191,7 @@
                             $('[id="instance.' + f + '"]').val(data[f]);
                         }
                     });
+                    decodeIFields();
                     $("#importModal").modal('hide');
                     $('a[href="#instance"]').tab('show');
                 } else {
