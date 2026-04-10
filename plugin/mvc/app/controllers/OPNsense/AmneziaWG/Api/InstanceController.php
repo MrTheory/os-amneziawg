@@ -31,13 +31,13 @@ class InstanceController extends ApiMutableModelControllerBase
                 ? str_repeat(chr(0xE2) . chr(0x80) . chr(0xA2), 44)
                 : '';
         }
-        // I1-I5 CPS tags contain angle brackets that may get HTML-encoded
-        // by the model layer — decode so the form displays raw tag syntax.
+        // I1-I5 CPS tags contain angle brackets that get double-encoded
+        // by the model layer — decode twice to restore raw tag syntax.
         foreach (['i1','i2','i3','i4','i5'] as $iField) {
             if (!empty($result['instance'][$iField])) {
-                $result['instance'][$iField] = html_entity_decode(
-                    (string)$result['instance'][$iField], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'
-                );
+                $val = (string)$result['instance'][$iField];
+                $val = html_entity_decode($val, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $result['instance'][$iField] = html_entity_decode($val, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             }
         }
         return $result;

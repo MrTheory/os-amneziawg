@@ -77,12 +77,12 @@ function awg_get_instances(): array
         'h2'                        => (string)($inst->h2                        ?? ''),
         'h3'                        => (string)($inst->h3                        ?? ''),
         'h4'                        => (string)($inst->h4                        ?? ''),
-        // I1-I5 CPS tags contain angle brackets — decode HTML entities from config.xml
-        'i1'                        => html_entity_decode((string)($inst->i1 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i2'                        => html_entity_decode((string)($inst->i2 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i3'                        => html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i4'                        => html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i5'                        => html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        // I1-I5 CPS tags contain angle brackets — double-decode HTML entities from config.xml
+        'i1'                        => html_entity_decode(html_entity_decode((string)($inst->i1 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i2'                        => html_entity_decode(html_entity_decode((string)($inst->i2 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
         'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
         'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
         'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
