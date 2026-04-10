@@ -76,9 +76,10 @@ class ImportController extends ApiControllerBase
                 ];
                 if (isset($map[$k])) {
                     // I1-I5 CPS tags contain angle brackets (e.g. <b 0xd1><r 50>)
-                    // — do not HTML-encode; response is JSON consumed via .val()
+                    // which get HTML-encoded by Phalcon's 'string' POST filter —
+                    // decode them back so the form receives raw tag syntax.
                     $data[$map[$k]] = in_array($map[$k], ['i1','i2','i3','i4','i5'], true)
-                        ? $value
+                        ? html_entity_decode($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
                         : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 }
             } elseif ($section === 'peer') {
