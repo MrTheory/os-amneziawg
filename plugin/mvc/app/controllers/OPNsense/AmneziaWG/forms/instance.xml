@@ -87,6 +87,18 @@
         <help>Extra bytes added before response message. From server config.</help>
     </field>
     <field>
+        <id>instance.s3</id>
+        <label>S3</label>
+        <type>text</type>
+        <help>AWG 2.0: extra bytes added before cookie message (0-1280). From server config.</help>
+    </field>
+    <field>
+        <id>instance.s4</id>
+        <label>S4</label>
+        <type>text</type>
+        <help>AWG 2.0: extra bytes added before transport data message (0-1280). From server config.</help>
+    </field>
+    <field>
         <id>instance.h1</id>
         <label>H1</label>
         <type>text</type>

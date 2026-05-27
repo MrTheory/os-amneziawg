@@ -73,6 +73,8 @@ function awg_get_instances(): array
         'jmax'                      => (string)($inst->jmax                      ?? ''),
         's1'                        => (string)($inst->s1                        ?? ''),
         's2'                        => (string)($inst->s2                        ?? ''),
+        's3'                        => (string)($inst->s3                        ?? ''),
+        's4'                        => (string)($inst->s4                        ?? ''),
         'h1'                        => (string)($inst->h1                        ?? ''),
         'h2'                        => (string)($inst->h2                        ?? ''),
         'h3'                        => (string)($inst->h3                        ?? ''),
@@ -113,7 +115,7 @@ function awg_write_conf(array $inst): string
         $lines[] = 'MTU = ' . awg_sanitize($inst['mtu']);
     }
     // Obfuscation parameters
-    $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2',
+    $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2','s3'=>'S3','s4'=>'S4',
             'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4',
             'i1'=>'I1','i2'=>'I2','i3'=>'I3','i4'=>'I4','i5'=>'I5'];
     // Validate H1-H4: must be >= 5 and ranges must not overlap

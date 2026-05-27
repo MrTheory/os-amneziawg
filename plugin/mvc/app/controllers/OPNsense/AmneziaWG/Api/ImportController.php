@@ -37,7 +37,7 @@ class ImportController extends ApiControllerBase
         $data = [
             'private_key' => '', 'address' => '', 'dns' => '', 'mtu' => '',
             'jc' => '', 'jmin' => '', 'jmax' => '',
-            's1' => '', 's2' => '',
+            's1' => '', 's2' => '', 's3' => '', 's4' => '',
             'h1' => '', 'h2' => '', 'h3' => '', 'h4' => '',
             'i1' => '', 'i2' => '', 'i3' => '', 'i4' => '', 'i5' => '',
             'peer_public_key' => '', 'peer_preshared_key' => '',
@@ -70,7 +70,7 @@ class ImportController extends ApiControllerBase
                     'privatekey' => 'private_key', 'address' => 'address',
                     'dns' => 'dns', 'mtu' => 'mtu',
                     'jc' => 'jc', 'jmin' => 'jmin', 'jmax' => 'jmax',
-                    's1' => 's1', 's2' => 's2',
+                    's1' => 's1', 's2' => 's2', 's3' => 's3', 's4' => 's4',
                     'h1' => 'h1', 'h2' => 'h2', 'h3' => 'h3', 'h4' => 'h4',
                     'i1' => 'i1', 'i2' => 'i2', 'i3' => 'i3', 'i4' => 'i4', 'i5' => 'i5',
                 ];

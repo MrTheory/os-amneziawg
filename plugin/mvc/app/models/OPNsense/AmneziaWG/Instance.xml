@@ -73,6 +73,16 @@
             <MinimumValue>0</MinimumValue>
             <MaximumValue>1280</MaximumValue>
         </s2>
+        <s3 type="IntegerField">
+            <Required>N</Required>
+            <MinimumValue>0</MinimumValue>
+            <MaximumValue>1280</MaximumValue>
+        </s3>
+        <s4 type="IntegerField">
+            <Required>N</Required>
+            <MinimumValue>0</MinimumValue>
+            <MaximumValue>1280</MaximumValue>
+        </s4>
         <h1 type="TextField">
             <Required>N</Required>
             <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
