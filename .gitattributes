@@ -1,0 +1,7 @@
+*.sh         text eol=lf
+*.bash       text eol=lf
+*.php        text eol=lf
+*.xml        text eol=lf
+*.volt       text eol=lf
+*.conf       text eol=lf
+50-amneziawg text eol=lf
