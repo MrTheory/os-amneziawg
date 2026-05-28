@@ -73,10 +73,18 @@ function awg_get_instances(): array
         'jmax'                      => (string)($inst->jmax                      ?? ''),
         's1'                        => (string)($inst->s1                        ?? ''),
         's2'                        => (string)($inst->s2                        ?? ''),
+        's3'                        => (string)($inst->s3                        ?? ''),
+        's4'                        => (string)($inst->s4                        ?? ''),
         'h1'                        => (string)($inst->h1                        ?? ''),
         'h2'                        => (string)($inst->h2                        ?? ''),
         'h3'                        => (string)($inst->h3                        ?? ''),
         'h4'                        => (string)($inst->h4                        ?? ''),
+        // I1-I5 CPS tags contain angle brackets — double-decode HTML entities from config.xml
+        'i1'                        => html_entity_decode(html_entity_decode((string)($inst->i1 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i2'                        => html_entity_decode(html_entity_decode((string)($inst->i2 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+        'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
         'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
         'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
         'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
@@ -107,22 +115,42 @@ function awg_write_conf(array $inst): string
         $lines[] = 'MTU = ' . awg_sanitize($inst['mtu']);
     }
     // Obfuscation parameters
-    $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2',
-            'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4'];
-    // Validate H1-H4: must be >= 5 and must not intersect each other
-    $hVals = [];
+    $obf = ['jc'=>'Jc','jmin'=>'Jmin','jmax'=>'Jmax','s1'=>'S1','s2'=>'S2','s3'=>'S3','s4'=>'S4',
+            'h1'=>'H1','h2'=>'H2','h3'=>'H3','h4'=>'H4',
+            'i1'=>'I1','i2'=>'I2','i3'=>'I3','i4'=>'I4','i5'=>'I5'];
+    // Validate H1-H4: must be >= 5 and ranges must not overlap
+    // Supports single values (e.g. "12345") and ranges (e.g. "12345-67890")
+    $hRanges = [];
     foreach (['h1','h2','h3','h4'] as $hk) {
-        $hv = (int)($inst[$hk] ?? 0);
-        if ($hv > 0 && $hv < 5) {
-            awg_log("WARNING: {$hk}={$hv} is invalid (must be >= 5, values 1-4 reserved). Skipping {$hk}.");
+        $raw = trim($inst[$hk] ?? '');
+        if ($raw === '') {
+            continue;
+        }
+        if (!preg_match('/^\d{1,10}(-\d{1,10})?$/', $raw)) {
+            awg_log("WARNING: {$hk}={$raw} has invalid format. Skipping {$hk}.");
             $inst[$hk] = '';
-        } elseif ($hv >= 5) {
-            if (in_array($hv, $hVals, true)) {
-                awg_log("WARNING: {$hk}={$hv} duplicates another H parameter. Skipping {$hk}.");
+            continue;
+        }
+        $parts = explode('-', $raw, 2);
+        $low  = (float)$parts[0];
+        $high = isset($parts[1]) ? (float)$parts[1] : $low;
+        if ($low < 5 || $high < 5 || $low > 4294967295 || $high > 4294967295 || $high < $low) {
+            awg_log("WARNING: {$hk}={$raw} is invalid (values must be 5-4294967295, start <= end). Skipping {$hk}.");
+            $inst[$hk] = '';
+            continue;
+        }
+        // Check overlap with previously validated H ranges
+        $overlap = false;
+        foreach ($hRanges as $prev => [$pLow, $pHigh]) {
+            if ($low <= $pHigh && $pLow <= $high) {
+                awg_log("WARNING: {$hk}={$raw} overlaps with {$prev}. Skipping {$hk}.");
                 $inst[$hk] = '';
-            } else {
-                $hVals[] = $hv;
+                $overlap = true;
+                break;
             }
+        }
+        if (!$overlap) {
+            $hRanges[$hk] = [$low, $high];
         }
     }
     foreach ($obf as $k => $label) {

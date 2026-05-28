@@ -31,6 +31,15 @@ class InstanceController extends ApiMutableModelControllerBase
                 ? str_repeat(chr(0xE2) . chr(0x80) . chr(0xA2), 44)
                 : '';
         }
+        // I1-I5 CPS tags contain angle brackets that get double-encoded
+        // by the model layer — decode twice to restore raw tag syntax.
+        foreach (['i1','i2','i3','i4','i5'] as $iField) {
+            if (!empty($result['instance'][$iField])) {
+                $val = (string)$result['instance'][$iField];
+                $val = html_entity_decode($val, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $result['instance'][$iField] = html_entity_decode($val, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            }
+        }
         return $result;
     }
 
@@ -85,19 +94,35 @@ class InstanceController extends ApiMutableModelControllerBase
         $_POST['instance']['private_key'] = self::PRIVKEY_SENTINEL;
 
         // Validate H1-H4: values must not intersect each other (awg driver requirement)
+        // Supports single values (e.g. "12345") and ranges (e.g. "12345-67890")
         $hFields = ['h1', 'h2', 'h3', 'h4'];
-        $hValues = [];
+        $hRanges = []; // array of [low, high] for overlap check
         $validationErrors = [];
         foreach ($hFields as $hf) {
             $val = trim($body[$hf] ?? '');
             if ($val !== '') {
-                $intVal = (int)$val;
-                if ($intVal < 5) {
-                    $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' must be in range 5-4294967295 (values 1-4 are reserved)';
-                } elseif (in_array($intVal, $hValues, true)) {
-                    $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' must not have the same value as another H parameter';
+                if (!preg_match('/^\d{1,10}(-\d{1,10})?$/', $val)) {
+                    $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' must be a number or range (e.g. 12345 or 12345-67890)';
+                    continue;
+                }
+                $parts = explode('-', $val, 2);
+                $low  = (float)$parts[0];
+                $high = isset($parts[1]) ? (float)$parts[1] : $low;
+                if ($low < 5 || $high < 5 || $low > 4294967295 || $high > 4294967295) {
+                    $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' values must be in range 5-4294967295 (values 1-4 are reserved)';
+                } elseif ($high < $low) {
+                    $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' range start must not exceed range end';
                 } else {
-                    $hValues[] = $intVal;
+                    // Check overlap with previously validated H ranges
+                    foreach ($hRanges as $prev => [$pLow, $pHigh]) {
+                        if ($low <= $pHigh && $pLow <= $high) {
+                            $validationErrors["instance.{$hf}"] = strtoupper($hf) . ' range must not overlap with ' . strtoupper($prev);
+                            break;
+                        }
+                    }
+                    if (!isset($validationErrors["instance.{$hf}"])) {
+                        $hRanges[$hf] = [$low, $high];
+                    }
                 }
             }
         }
