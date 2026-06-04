@@ -1,8 +1,8 @@
 # os-amneziawg
 
-**AmneziaWG VPN plugin for OPNsense** — v2.7.0
+**AmneziaWG VPN plugin for OPNsense** — v3.0.0
 
-AmneziaWG — обфусцированный форк WireGuard для обхода DPI-блокировок. Этот плагин добавляет AmneziaWG в OPNsense как нативный VPN-клиент с поддержкой селективной маршрутизации.
+AmneziaWG — обфусцированный форк WireGuard для обхода DPI-блокировок. Этот плагин добавляет AmneziaWG в OPNsense как нативный VPN-клиент с поддержкой **нескольких туннелей одновременно** и селективной маршрутизации.
 
 > ⚠️ **Перед началом** прочитай [PREREQUISITES.md](PREREQUISITES.md) — там перечислены сетевые предусловия (особенно если OPNsense в виртуалке: Hyper-V/VMware/VirtualBox/KVM), про csh→sh на FreeBSD и про получение `.conf` от сервера.
 
@@ -10,18 +10,24 @@ AmneziaWG — обфусцированный форк WireGuard для обхо�
 
 ## Возможности
 
-- Импорт клиентского `.conf` файла одной кнопкой — **Parse & Fill**
+- **Multi-instance** (с v3.0.0): до 100 туннелей `awg0`–`awg99` одновременно — например, два независимых VPN-провайдера или разные туннели для разных Firewall Rules / Gateway Groups
+  - Грид туннелей с диалогом редактирования; toggle enabled прямо в строке
+  - **Per-row Start/Stop** — управление каждым туннелем отдельно, не трогая остальные
+  - Watchdog перезапускает только упавший туннель — живые сессии не рвутся
+  - Автомиграция конфигурации с одно-туннельных версий 2.x при обновлении
+- Импорт клиентского `.conf` файла одной кнопкой — **Parse & Fill** открывает диалог нового туннеля с заполненными полями
 - **Полная поддержка AmneziaWG 2.0** (с v2.7.0):
   - Базовые параметры обфускации: Jc, Jmin, Jmax, S1, S2
   - **S3, S4** — handshake cookie / transport message padding
   - **H1–H4** — magic headers с поддержкой **диапазонов** (`12345-67890`)
   - **I1–I5** — CPS (Custom Protocol Signature) пакеты для DPI-маскировки
-- Генерация keypair прямо в GUI — публичный ключ отображается для передачи администратору сервера
-- Приватный ключ хранится в защищённом файле `private.key` (0600) — не попадает в бэкапы конфига
-- Управление туннелем через GUI: **VPN → AmneziaWG** — кнопки Start/Stop/Restart
-- Автозапуск туннеля при перезагрузке OPNsense (rc.syshook)
-- Статус туннеля через `awg show` в реальном времени
-- Валидация всех полей: CIDR, host:port, Base64 ключи, диапазоны H1-H4
+- Генерация keypair прямо в диалоге туннеля — публичный ключ отображается для передачи администратору сервера
+- Приватные ключи в защищённых файлах `<uuid>.key` (0600, один на туннель) — не попадают в бэкапы конфига
+- Управление через GUI: **VPN → AmneziaWG** — сервисные кнопки Start/Stop/Restart + per-row кнопки в гриде
+- Автозапуск всех включённых туннелей при перезагрузке OPNsense (rc.syshook)
+- Per-instance диагностика: селектор туннеля на вкладке Diagnostics, статус через `awg show` в реальном времени
+- **Test Connection с подсказками**: при ошибке плагин сам определяет причину (нет handshake / нет маршрута / DNS / сервер не отвечает) и подсказывает следующий шаг
+- Валидация всех полей: CIDR, host:port, Base64 ключи, диапазоны H1-H4, уникальность номеров интерфейсов
 - Совместимость с селективной маршрутизацией OPNsense (Firewall Rules + Gateway)
 - Корректное отображение статуса сервиса в дашборде OPNsense
 - Журнал операций `/var/log/amneziawg.log` с автоматической ротацией
@@ -90,13 +96,14 @@ configctl amneziawg version
 
 ### 3. Импорт `.conf` в GUI
 
-1. Обнови браузер (Ctrl+F5) → **VPN → AmneziaWG**
-2. Нажми **Import .conf** → вставь конфиг → **Parse & Fill**
+1. Обнови браузер (Ctrl+F5) → **VPN → AmneziaWG** → вкладка **Tunnels**
+2. Нажми **Import .conf** → вставь конфиг → **Parse & Fill** — откроется диалог нового туннеля с заполненными полями
 3. Проверь, что все поля заполнились корректно. Для AWG 2.0 особое внимание на S3, S4, диапазоны H1-H4 (формат `12345-67890`), I1
 4. Поле **DNS** — оставь пустым, если используешь Unbound (рекомендуется)
-5. Перейди на вкладку **General** → поставь галочку **Enable AmneziaWG**
-6. Нажми **Apply**
-7. Проверь туннель:
+5. Заполни **Name** (имя туннеля) → **Save**. Номер интерфейса (`awg<N>`) подставляется автоматически
+6. На вкладке **General** проверь галочку **Enable AmneziaWG** → нажми **Apply**
+7. Для второго и последующих туннелей — повтори импорт: каждый получит свой `awg<N>`
+8. Проверь туннель:
 
 ```bash
 sh
@@ -268,7 +275,7 @@ CIDR-подсети Google (актуальный список — обновля
 | **Source** | `LAN net` |
 | **Destination** | `vpn_domains,google_nets` (через запятую, OPNsense объединит) |
 | **Description** | `Route vpn_domains via AWG` |
-| **Gateway** | `AWG_GW` ← искать в разделе **Advanced features** |
+| **Gateway** | `AWG_GW` (в OPNsense 25.x поле спрятано в разделе **Advanced features**; в 26.x — в основном блоке формы) |
 
 **Save → Apply changes**.
 
@@ -593,7 +600,7 @@ PMTU Black Hole для TCP. Маленькие запросы (DNS, просто
 
 Сначала убедиться, что на интерфейсе нет искусственных ограничений:
 
-1. **VPN → AmneziaWG → Instance → MTU** → пусто → **Apply**.
+1. **VPN → AmneziaWG → Tunnels → Edit туннеля → MTU** → пусто → **Save → Apply**.
 2. **Interfaces → AWG → MTU** → пусто → **Save → Apply**.
 3. **Interfaces → AWG → MSS** → пусто → **Save → Apply**.
 4. `configctl amneziawg restart`.
@@ -614,7 +621,7 @@ done
 
 | Поле | Значение |
 |------|----------|
-| **VPN → AmneziaWG → Instance → MTU** | найденный PMTU (напр. `1380`) |
+| **VPN → AmneziaWG → Tunnels → Edit туннеля → MTU** | найденный PMTU (напр. `1380`) |
 | **Interfaces → AWG → MTU** | пусто (не дублировать) |
 | **Interfaces → AWG → MSS** | PMTU − 40 (напр. `1340`) |
 
@@ -687,16 +694,18 @@ tail -20 /var/log/amneziawg.log
 ### Проблемы с приватным ключом
 
 ```bash
-# Файл ключа существует?
-ls -la /usr/local/etc/amnezia/private.key
+# Файлы ключей существуют? (один <uuid>.key на туннель)
+ls -la /usr/local/etc/amnezia/*.key
 
 # В config.xml должен быть sentinel (не сам ключ!)
-grep -A1 'private_key' /conf/config.xml
-# Ожидается: ::file::
+grep -B4 'private_key' /conf/config.xml
+# Ожидается: ::file:: (uuid инстанса — в атрибуте instance uuid="...")
 
-# Перегенерировать пару ключей
-configctl amneziawg gen_keypair
+# Сгенерировать новую пару: кнопка Generate Keypair в диалоге туннеля.
+# Ключ сохраняется на диск при Save диалога.
 ```
+
+> При обновлении с 2.x старый `private.key` автоматически переименовывается в `<uuid>.key` мигратором.
 
 ### Где искать логи
 
@@ -711,11 +720,15 @@ configctl amneziawg gen_keypair
 
 ```bash
 sh                                     # из csh в bash
-awg show                               # статус туннеля, handshake
+awg show                               # статус всех туннелей, handshake
 awg show awg0 transfer                 # переданные байты
 configctl amneziawg status             # статус через configd (JSON)
 configctl amneziawg version            # версия плагина
-configctl amneziawg validate           # проверка корректности awg0.conf
+configctl amneziawg validate           # проверка корректности конфигов
+configctl amneziawg ifstats awg1       # статистика конкретного туннеля
+configctl amneziawg testconnect awg1   # тест связности конкретного туннеля
+configctl amneziawg start_instance awg1   # поднять один туннель
+configctl amneziawg stop_instance awg1    # погасить один туннель (watchdog не вернёт)
 ifconfig awg0                          # детали интерфейса
 netstat -rn | grep awg                 # таблица маршрутизации
 tail -f /var/log/amneziawg.log         # мониторинг лога в реальном времени
@@ -734,7 +747,7 @@ pkg info amnezia-kmod amnezia-tools    # версии пакетов
 sh install.sh uninstall
 ```
 
-> При удалении: предлагается удалить пакеты `amnezia-kmod` и `amnezia-tools`, очищается запись `if_amn_load` из `/boot/loader.conf`. Директория `/usr/local/etc/amnezia/` (включая `private.key` и `.conf` файлы) удаляется автоматически.
+> При удалении: предлагается удалить пакеты `amnezia-kmod` и `amnezia-tools`, очищается запись `if_amn_load` из `/boot/loader.conf`. Директория `/usr/local/etc/amnezia/` (включая все `<uuid>.key` и `.conf` файлы) удаляется автоматически. Настройки туннелей в `config.xml` сохраняются и подхватываются при повторной установке (но приватные ключи придётся ввести заново).
 
 ---
 
@@ -743,40 +756,46 @@ sh install.sh uninstall
 ```
 plugin/
 ├── scripts/AmneziaWG/
-│   └── amneziawg-service-control.php     # Управление туннелем: start/stop/reconfigure/status/gen_keypair
+│   ├── amneziawg-service-control.php     # Engine: start/stop/reconfigure/status/start_instance/stop_instance/sentinel_repair/gen_keypair
+│   ├── amneziawg-watchdog.php            # Автоперезапуск упавших туннелей (per-instance)
+│   ├── amneziawg-ifstats.php             # Статистика интерфейса (параметр awgN)
+│   └── amneziawg-testconnect.php         # Тест связности + диагностика причины ошибки (параметр awgN)
 ├── service/conf/actions.d/
-│   └── actions_amneziawg.conf            # Команды configd
+│   └── actions_amneziawg.conf            # Команды configd (15 действий)
 ├── etc/
 │   ├── inc/plugins.inc.d/
-│   │   └── amneziawg.inc                 # Регистрация сервиса в OPNsense
+│   │   └── amneziawg.inc                 # Регистрация сервиса в OPNsense + cron watchdog
 │   └── newsyslog.conf.d/
 │       └── amneziawg.conf                # Ротация лога (1MB / daily, 5 архивов, gzip)
 └── mvc/app/
     ├── models/OPNsense/AmneziaWG/
-    │   ├── General.xml / General.php      # Модель: флаг enabled
-    │   ├── Instance.xml / Instance.php    # Модель: все параметры туннеля (плоская)
+    │   ├── General.xml / General.php      # Модель: флаги enabled, watchdog
+    │   ├── Instance.xml / Instance.php    # Модель: туннели (ArrayField, UUID-ключи)
+    │   ├── Migrations/M2_0_0.php          # Миграция flat 2.x → multi-instance
     │   ├── ACL/ACL.xml                    # ACL: права доступа к API и UI
     │   └── Menu/Menu.xml                  # Пункт меню VPN → AmneziaWG
     ├── controllers/OPNsense/AmneziaWG/
-    │   ├── IndexController.php            # Рендеринг страницы
-    │   ├── Api/GeneralController.php      # API: get/set general.enabled
-    │   ├── Api/InstanceController.php     # API: get/set + genKeyPair (SEC-1/SEC-2)
-    │   ├── Api/ServiceController.php      # API: reconfigure/start/stop/restart/tunnelStatus/version
+    │   ├── IndexController.php            # Рендеринг страницы (формы + грид)
+    │   ├── Api/GeneralController.php      # API: get/set general flags
+    │   ├── Api/InstanceController.php     # API: CRUD туннелей по UUID + genKeyPair (SEC-1/SEC-2)
+    │   ├── Api/ServiceController.php      # API: сервис + start/stop_instance + diagnostics/testconnect
     │   ├── Api/ImportController.php       # API: парсинг .conf файла (POST only)
     │   └── forms/
     │       ├── general.xml                # Форма общих настроек
-    │       └── instance.xml              # Форма параметров туннеля
+    │       └── dialogInstance.xml         # Диалог туннеля + колонки грида (один XML на оба)
     └── views/OPNsense/AmneziaWG/
-        └── general.volt                   # Шаблон GUI (вкладки Instance + General)
+        └── general.volt                   # Шаблон GUI (вкладки Tunnels / General / Diagnostics / Log)
 ```
 
 **Файлы на OPNsense после установки:**
 ```
-/usr/local/etc/amnezia/private.key          (0600) — приватный ключ (не в бэкапах)
-/usr/local/etc/amnezia/awg0.conf            (0600) — конфиг туннеля
+/usr/local/etc/amnezia/<uuid>.key           (0600) — приватный ключ туннеля (не в бэкапах), один на туннель
+/usr/local/etc/amnezia/awg<N>.conf          (0600) — runtime-конфиги туннелей (зачищаются при stop)
 /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt — версия плагина
-/var/run/amneziawg.pid                             — PID файл статуса
+/var/run/amneziawg.pid                             — PID sentinel-процесса (статус в дашборде)
 /var/run/amneziawg.lock                            — lock файл от параллельных запусков
+/var/run/amneziawg_stopped.flag                    — сервис остановлен вручную (watchdog не вмешивается)
+/var/run/amneziawg_stopped_awg<N>.flag             — туннель остановлен per-row кнопкой из грида
 /var/log/amneziawg.log                             — лог операций
 ```
 
@@ -786,15 +805,17 @@ plugin/
 
 **Table = off** — `awg-quick` не трогает таблицу маршрутизации. Маршрутами управляет OPNsense через Firewall Rules + Gateway. Это позволяет реализовать селективную маршрутизацию идентично Xray/WireGuard плагинам.
 
-**Плоская модель** — один туннель, одна модель без ArrayField. XML-путь: `//OPNsense/amneziawg/instance`. Подходит для большинства сценариев использования AmneziaWG как клиента.
+**Multi-instance (ArrayField)** — туннели хранятся в `//OPNsense/amneziawg/instances/instance` с UUID-ключами, до 100 туннелей `awg0`–`awg99` (уникальный `interface_number` на туннель). При обновлении с 2.x плоская модель мигрируется автоматически (`Migrations/M2_0_0.php`, запускается из `install.sh` через `run_migrations.php`).
 
-**Sentinel private.key** — в `config.xml` хранится строка `::file::` вместо ключа. Реальный ключ в `private.key` (0600). `InstanceController` перехватывает `get`/`set`/`genKeyPair` и управляет файлом напрямую. GUI показывает bullet-плейсхолдер.
+**Sentinel приватных ключей** — в `config.xml` хранится строка `::file::` вместо ключа. Реальные ключи в `/usr/local/etc/amnezia/<uuid>.key` (0600, один на туннель). `InstanceController` перехватывает чтение/запись и управляет файлами напрямую. GUI показывает bullet-плейсхолдер; при удалении туннеля его ключ удаляется вместе с ним.
 
-**Конфиг туннеля** записывается в `/usr/local/etc/amnezia/awg0.conf` (права 0600) при каждом Apply.
+**Runtime-конфиги** записываются в `/usr/local/etc/amnezia/awg<N>.conf` (права 0600) при каждом старте туннеля и зачищаются при остановке сервиса — это производные артефакты, источник правды: `config.xml` + `<uuid>.key`.
 
-**PID файл** `/var/run/amneziawg.pid` создаётся после успешного `awg-quick up` и удаляется при `stop` — обеспечивает корректный статус в дашборде OPNsense.
+**Sentinel-процесс** — `awg-quick up` завершается после создания интерфейса, поэтому для статуса в дашборде запускается легковесный процесс через `daemon -p /var/run/amneziawg.pid`. Один на сервис: работает, пока жив хотя бы один туннель.
 
-**flock защита** — параллельные вызовы `reconfigure` (от configd и ручного запуска) не конкурируют: второй вызов немедленно возвращает `OK` и выходит.
+**Watchdog (гранулярный)** — при падении туннеля перезапускает только его (`start_instance`), не трогая живые. Туннели, остановленные per-row кнопкой (флаг `amneziawg_stopped_awgN.flag`), не поднимает. Если умер только sentinel-процесс — чинит PID через `sentinel_repair` без перезапуска туннелей.
+
+**flock защита** — параллельные вызовы `reconfigure` (от configd и ручного запуска) не конкурируют: второй вызов немедленно возвращает `OK` и выходит. Зависший дольше 120 секунд процесс-владелец убивается.
 
 **AWG 2.0 — двойной html_entity_decode для I1-I5** — CPS-теги вида `<b 0xHEX>` хранятся в `config.xml` с двойным HTML-эскейпом из-за Phalcon-фильтра. Чтобы итоговая запись в `awg0.conf` содержала рабочие угловые скобки, плагин делает `html_entity_decode` дважды в `awg_get_instances()`.
 

@@ -358,8 +358,8 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # DETECT EXISTING CONFIG (MED-8)
 # Multi-instance (3.0.0): checks both the new collection path and the legacy
-# flat node. A legacy node is migrated automatically by the model migration
-# (M2_0_0) on first model access after install — no manual import needed.
+# flat node. A legacy node is migrated by the model migration (M2_0_0),
+# executed in Step 4 via run_migrations.php — no manual import needed.
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "==> Step 2: Checking for existing AmneziaWG configuration..."
@@ -385,7 +385,7 @@ fi
 
 if [ "$CONFIG_XML_HAS_AWG" = "1" ]; then
     echo "[OK]  Existing configuration found in config.xml — will not overwrite."
-    echo "      A pre-3.0.0 single-tunnel config is migrated automatically on first GUI access."
+    echo "      A pre-3.0.0 single-tunnel config is migrated automatically in Step 4."
 else
     # Stray .conf files are reported only — import via GUI 'Import .conf' dialog
     for _f in /usr/local/etc/amnezia/awg*.conf; do

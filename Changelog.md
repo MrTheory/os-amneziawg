@@ -2,6 +2,64 @@
 
 ---
 
+## v3.0.0 — 2026-06-05
+
+### Multi-instance: несколько туннелей одновременно (BACKLOG #1)
+
+**Breaking change: миграция модели конфигурации.** Плоская модель `//OPNsense/amneziawg/instance` (один туннель) заменена на ArrayField `//OPNsense/amneziawg/instances/instance` с UUID-ключами — до 100 туннелей `awg0`–`awg99`. При обновлении с 2.x существующий туннель мигрируется автоматически (`install.sh` запускает `run_migrations.php`): генерируется UUID, `private.key` переименовывается в `<uuid>.key`, legacy-узлы удаляются. Работающий туннель при обновлении не прерывается.
+
+**Грид туннелей вместо одиночной формы.** Вкладка Instance заменена вкладкой **Tunnels**: bootgrid-таблица (enabled-toggle, имя, номер интерфейса, endpoint) + диалог редактирования со всеми полями. Add подставляет первый свободный номер интерфейса; дубликаты номеров отклоняются валидацией; Delete удаляет и `<uuid>.key`.
+
+**Per-row Start/Stop.** Кнопки ▶/■ в каждой строке грида управляют отдельным туннелем (`POST /api/amneziawg/service/start_instance|stop_instance/<uuid>`). Ручная остановка туннеля ставит per-instance флаг `/var/run/amneziawg_stopped_awgN.flag` — watchdog не поднимает его обратно. Сервисные операции (Start/Stop/Restart/Apply) сбрасывают per-row стопы.
+
+**Гранулярный watchdog.** При падении туннеля перезапускается только он (`start_instance`), остальные живут без разрыва сессий. Если умер только sentinel-процесс — новое действие `sentinel_repair` чинит PID-файл, не трогая туннели.
+
+**Per-instance диагностика.** Селектор туннеля на вкладке Diagnostics: статистика, Test Connection и Copy Debug Info работают по выбранному интерфейсу (`configctl amneziawg ifstats awgN` / `testconnect awgN`, anti-injection валидация токена).
+
+**Импорт .conf → новый туннель.** Parse & Fill открывает Add-диалог с заполненными полями (или дозаполняет уже открытый диалог). Generate Keypair встроен в диалог: возвращает пару stateless, приватный ключ сохраняется на диск при Save.
+
+**SEC-1 (re-scope).** Приватные ключи: один файл на туннель `/usr/local/etc/amnezia/<uuid>.key` (0600), в config.xml — sentinel `::file::`. Runtime-конфиги `awgN.conf` зачищаются при остановке сервиса — удалённый туннель не оставляет ключ на диске.
+
+### Test Connection: подсказки при ошибке (BACKLOG #2)
+
+При неудаче теста выполняется активная диагностика причины: `interface_down` / `handshake_stale` / `dns_failure` / `no_route` / `remote_unresponsive`. JSON-ответ получил `error_code` и `hint` — GUI показывает подсказку следующего шага под сообщением об ошибке (например, «туннель и handshake в порядке, но маршрута через awgN нет — настрой selective routing, README §4–7»).
+
+### Исправления
+
+**Пустой Edit-диалог грида.** `mapDataToFormUI` в OPNsense матчит форму диалога по `id.split('-')[0]` — дефис в id грида (`grid-instances`) ломал загрузку данных. Id гридов/диалогов теперь без дефисов (как в core-плагинах).
+
+**Кнопка Add в OPNsense 26.x.** Tabulator-грид 26.x заменяет исходную таблицу — `tfoot button[data-action=add]` исчезает из DOM. Import теперь кликает `button.command-add` (с fallback на legacy-селектор для 25.x).
+
+**Reconfigure сбрасывает stopped-флаг.** Раньше после ручного Stop + Apply туннели поднимались, но watchdog продолжал считать сервис остановленным.
+
+**curl `000` больше не показывается как HTTP-код.** Test Connection при отсутствии ответа пишет «no response» вместо «Unexpected HTTP code 000».
+
+### Новые API-эндпоинты и configd-действия
+
+- `POST /api/amneziawg/instance/search_item|get_item|add_item|set_item|del_item|toggle_item` — CRUD туннелей (UUID)
+- `POST /api/amneziawg/service/start_instance/<uuid>`, `stop_instance/<uuid>` — управление отдельным туннелем
+- configd: `[start_instance]`, `[stop_instance]`, `[sentinel_repair]`; `[ifstats]`/`[testconnect]` принимают параметр `awgN`
+
+---
+
+## v2.7.0 — 2026-05-28
+
+### Полная поддержка AmneziaWG 2.0
+
+**S3/S4 — padding параметры AWG 2.0**
+Новые поля S3 (handshake cookie padding) и S4 (transport message padding), 0–1280. Прокинуты по всей цепочке: модель → GUI → генерация конфига.
+
+**H1–H4 — поддержка диапазонов**
+Поля принимают одиночное значение (`12345`) или диапазон (`12345-67890`). Серверная валидация: формат, диапазон 5–4294967295, взаимное непересечение диапазонов H1–H4 (требование драйвера).
+
+**I1–I5 — CPS (Custom Protocol Signature)**
+Поддержка пакетов DPI-маскировки с тегами `<b 0xHEX>`, `<r N>`, `<t>`, `<c>` и др. Двойной `html_entity_decode` компенсирует HTML-эскейп Phalcon при чтении и записи конфига.
+
+**Документация**
+README переработан под AWG 2.0: системные требования (amnezia-kmod 2.0.x), описание новых параметров, troubleshooting.
+
+---
+
 ## v2.6.0 — 2026-03-17
 
 ### Исправления
@@ -325,7 +383,9 @@ configd сериализует запросы. Поллинг `tunnel_status` к
 
 ---
 
-## v4.0.0 — 2026-02-25
+## v4.0.0 — 2026-02-25 (легаси-нумерация)
+
+> ⚠️ Записи ниже относятся к ранней нумерации версий (февраль 2026: 1.0.0 → 2.0.0 → 3.0.0 → 4.0.0), после которой проект перешёл на ветку 2.1.x. Не путать с актуальным релизом v3.0.0 (2026-06-05, multi-instance) выше.
 
 ### Исправления багов
 
@@ -358,7 +418,7 @@ OPNsense определяет статус сервиса по наличию PI
 
 ---
 
-## v3.0.0 — 2026-02-20
+## v3.0.0 — 2026-02-20 (легаси-нумерация)
 
 ### Первая рабочая версия
 
