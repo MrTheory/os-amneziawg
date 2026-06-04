@@ -29,13 +29,66 @@
         });
 
         // ── Tunnels grid ──────────────────────────────────────────────
+        // Per-row runtime control: Start/Stop one tunnel without touching
+        // the others. A per-row Stop sets a per-instance flag so the
+        // watchdog won't bring the tunnel back (service Start/Restart/Apply
+        // resets per-row stops).
+        function tunnelRowAction(btn, action) {
+            var uuid  = $(btn).data('row-id');
+            var $icon = $(btn).find('span');
+            var orig  = $icon.attr('class');
+            if ($icon.hasClass('fa-spinner')) {
+                return;
+            }
+            $icon.attr('class', 'fa fa-spinner fa-spin fa-fw');
+            _statusPaused = true;
+            $.ajax({
+                url:      '/api/amneziawg/service/' + action + '/' + uuid,
+                type:     'POST',
+                dataType: 'json',
+                timeout:  40000,
+                success: function (data) {
+                    $icon.attr('class', orig);
+                    if (!data || data.result !== 'ok') {
+                        BootstrapDialog.show({
+                            type:    BootstrapDialog.TYPE_DANGER,
+                            title:   "{{ lang._('Error') }}",
+                            message: (data && data.message) || "{{ lang._('Tunnel action failed') }}",
+                            buttons: [{ label: "{{ lang._('Close') }}", action: function (d) { d.close(); } }]
+                        });
+                    }
+                    _statusPaused = false;
+                    updateStatus();
+                },
+                error: function () {
+                    $icon.attr('class', orig);
+                    _statusPaused = false;
+                    alert("{{ lang._('Request failed') }}");
+                }
+            });
+        }
+
         $("#{{formGridInstance['table_id']}}").UIBootgrid(
             {   'search': '/api/amneziawg/instance/search_item',
                 'get':    '/api/amneziawg/instance/get_item/',
                 'set':    '/api/amneziawg/instance/set_item/',
                 'add':    '/api/amneziawg/instance/add_item/',
                 'del':    '/api/amneziawg/instance/del_item/',
-                'toggle': '/api/amneziawg/instance/toggle_item/'
+                'toggle': '/api/amneziawg/instance/toggle_item/',
+                'commands': {
+                    start: {
+                        method: function () { tunnelRowAction(this, 'start_instance'); },
+                        classname: 'fa fa-play fa-fw text-success',
+                        title: "{{ lang._('Start') }}",
+                        sequence: 1
+                    },
+                    stop: {
+                        method: function () { tunnelRowAction(this, 'stop_instance'); },
+                        classname: 'fa fa-stop fa-fw text-danger',
+                        title: "{{ lang._('Stop') }}",
+                        sequence: 2
+                    }
+                }
             }
         );
 

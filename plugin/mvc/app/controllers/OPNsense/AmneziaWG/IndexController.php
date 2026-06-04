@@ -11,7 +11,11 @@ class IndexController extends \OPNsense\Base\IndexController
         // NB: grid id must NOT contain a hyphen — mapDataToFormUI matches the dialog
         // form via id.split('-')[0], so 'grid-instances' silently broke Edit data load.
         $this->view->formDialogInstance = $this->getForm('dialogInstance');
-        $this->view->formGridInstance   = $this->getFormGrid('dialogInstance');
+        // command_width: 5 row buttons (start/stop/edit/copy/delete)
+        $this->view->formGridInstance   = array_merge(
+            $this->getFormGrid('dialogInstance'),
+            ['command_width' => '160']
+        );
         $this->view->pick('OPNsense/AmneziaWG/general');
     }
 }

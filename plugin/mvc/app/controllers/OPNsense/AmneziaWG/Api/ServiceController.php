@@ -84,6 +84,56 @@ class ServiceController extends ApiMutableServiceControllerBase
     // statusAction() is inherited from ApiMutableServiceControllerBase.
 
     /**
+     * Resolve an instance uuid to its awgN interface name.
+     * Returns '' when the uuid is malformed or unknown.
+     */
+    private function instanceInterface(string $uuid): string
+    {
+        if (!preg_match('/^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$/', $uuid)) {
+            return '';
+        }
+        $model = new \OPNsense\AmneziaWG\Instance();
+        $node  = $model->getNodeByReference('instance.' . $uuid);
+        if ($node === null) {
+            return '';
+        }
+        $ifnum = trim((string)$node->interface_number);
+        return 'awg' . ($ifnum === '' ? '0' : (string)(int)$ifnum);
+    }
+
+    /**
+     * POST /api/amneziawg/service/start_instance/<uuid>
+     * Brings up a single tunnel (per-row grid action).
+     */
+    public function startInstanceAction($uuid = '')
+    {
+        if (!$this->request->isPost()) {
+            return ['result' => 'failed', 'message' => 'POST required'];
+        }
+        $iface = $this->instanceInterface((string)$uuid);
+        if ($iface === '') {
+            return ['result' => 'failed', 'message' => 'Unknown tunnel instance'];
+        }
+        return $this->runAction('amneziawg start_instance ' . $iface);
+    }
+
+    /**
+     * POST /api/amneziawg/service/stop_instance/<uuid>
+     * Brings down a single tunnel (per-row grid action).
+     */
+    public function stopInstanceAction($uuid = '')
+    {
+        if (!$this->request->isPost()) {
+            return ['result' => 'failed', 'message' => 'POST required'];
+        }
+        $iface = $this->instanceInterface((string)$uuid);
+        if ($iface === '') {
+            return ['result' => 'failed', 'message' => 'Unknown tunnel instance'];
+        }
+        return $this->runAction('amneziawg stop_instance ' . $iface);
+    }
+
+    /**
      * GET /api/amneziawg/service/version
      */
     public function versionAction()

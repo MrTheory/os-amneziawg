@@ -47,6 +47,23 @@ function awg_valid_iface(string $tok): bool
     return preg_match('/^awg\d{1,2}$/', $tok) === 1;
 }
 
+// Per-instance stopped flag: set by stop_instance, cleared by start_instance.
+// Watchdog skips flagged interfaces so a per-row Stop in the grid sticks.
+// $iface must pass awg_valid_iface() before calling.
+function awg_instance_stopped_flag(string $iface): string
+{
+    return '/var/run/amneziawg_stopped_' . $iface . '.flag';
+}
+
+// Service-level actions (start/restart/reconfigure/stop) reset per-row stops:
+// they either bring every enabled tunnel up or take the whole service down.
+function awg_clear_instance_stopped_flags(): void
+{
+    foreach (glob('/var/run/amneziawg_stopped_awg*.flag') ?: [] as $flag) {
+        @unlink($flag);
+    }
+}
+
 function awg_get_instances(): array
 {
     $config = OPNsense\Core\Config::getInstance()->object();
@@ -380,7 +397,7 @@ function awg_pid_alive(int $pid): bool
 // If lock is held longer than this, force-acquire (awg-quick hung)
 define('AWG_LOCK_TIMEOUT', 120);
 
-$lockActions = ['start', 'stop', 'restart', 'reconfigure', 'start_instance', 'stop_instance'];
+$lockActions = ['start', 'stop', 'restart', 'reconfigure', 'start_instance', 'stop_instance', 'sentinel_repair'];
 $lockFp = null;
 $lockFile = '/var/run/amneziawg.lock';
 if (in_array($action, $lockActions, true)) {
@@ -509,10 +526,11 @@ switch ($action) {
             echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
-        // Remove stopped flag so watchdog can monitor
+        // Remove stopped flags so watchdog can monitor
         if (file_exists(AWG_STOPPED_FLAG)) {
             unlink(AWG_STOPPED_FLAG);
         }
+        awg_clear_instance_stopped_flags();
         awg_start_all();
         echo "OK\n";
         break;
@@ -522,6 +540,8 @@ switch ($action) {
         if (file_put_contents(AWG_STOPPED_FLAG, (string)getmypid()) === false) {
             awg_log('WARNING: failed to write stopped flag');
         }
+        // Service-level flag covers everything — drop stale per-instance flags
+        awg_clear_instance_stopped_flags();
         awg_stop_all();
         echo "OK\n";
         break;
@@ -535,10 +555,11 @@ switch ($action) {
             echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
-        // Remove stopped flag so watchdog can monitor
+        // Remove stopped flags so watchdog can monitor
         if (file_exists(AWG_STOPPED_FLAG)) {
             unlink(AWG_STOPPED_FLAG);
         }
+        awg_clear_instance_stopped_flags();
         awg_stop_all();
         awg_start_all();
         echo "OK\n";
@@ -553,6 +574,12 @@ switch ($action) {
             echo "ERROR: if_amn kernel module not available. Install/reinstall amnezia-kmod.\n";
             break;
         }
+        // Apply = make runtime match config: clear manual-stop state too,
+        // otherwise tunnels come up while watchdog still considers them stopped
+        if (file_exists(AWG_STOPPED_FLAG)) {
+            unlink(AWG_STOPPED_FLAG);
+        }
+        awg_clear_instance_stopped_flags();
         awg_stop_all();
         awg_start_all();
         echo "OK\n";
@@ -582,11 +609,28 @@ switch ($action) {
                 echo "ERROR: no enabled instance for " . $ifaceArg . "\n";
                 break;
             }
+            // Manual per-row start lifts the per-instance stop
+            @unlink(awg_instance_stopped_flag($ifaceArg));
             awg_up($target);
         } else {
+            // Flag first so watchdog doesn't race a restart mid-teardown
+            if (file_put_contents(awg_instance_stopped_flag($ifaceArg), (string)getmypid()) === false) {
+                awg_log('WARNING: failed to write per-instance stopped flag for ' . $ifaceArg);
+            }
             awg_down(['interface' => $ifaceArg]);
         }
         // Service-level sentinel follows the number of live tunnels
+        if (awg_count_up() > 0) {
+            awg_start_sentinel();
+        } else {
+            awg_stop_sentinel();
+        }
+        echo "OK\n";
+        break;
+
+    case 'sentinel_repair':
+        // Re-sync the sentinel PID with the actual tunnel state without
+        // touching any tunnel (used by watchdog when only the PID died).
         if (awg_count_up() > 0) {
             awg_start_sentinel();
         } else {
