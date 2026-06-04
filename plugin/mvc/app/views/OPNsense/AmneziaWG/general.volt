@@ -224,10 +224,12 @@
                         });
                         decodeIFields();
                     } else {
-                        // Stash and open the Add dialog
+                        // Stash and open the Add dialog.
+                        // 26.x (Tabulator) renders the add button as .command-add inside
+                        // the grid container div; legacy bootgrid used [data-action="add"].
                         window._awgImportData = parsed;
-                        $('#{{formGridInstance['table_id']}}').closest('.bootgrid-container, div')
-                            .find('button[data-action="add"]').first().click();
+                        $('#{{formGridInstance['table_id']}}')
+                            .find('button.command-add, button[data-action="add"]').first().click();
                     }
                 } else {
                     alert(data.message || "{{ lang._('Parse error') }}");
