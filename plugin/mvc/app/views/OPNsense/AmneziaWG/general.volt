@@ -387,10 +387,16 @@
                 success: function (data) {
                     $btn.prop('disabled', false).html('<i class="fa fa-bolt"></i> {{ lang._("Test Connection") }}');
                     var ok = (data.status === 'ok');
+                    var html = '<strong>' + (ok ? '{{ lang._("Success") }}' : '{{ lang._("Failed") }}') + ':</strong> '
+                             + $('<div>').text(data.message || '').html();
+                    if (!ok && data.hint) {
+                        html += '<br><small><em><i class="fa fa-lightbulb-o"></i> '
+                              + $('<div>').text(data.hint).html() + '</em></small>';
+                    }
                     $('#testResult')
                         .removeClass('alert-success alert-danger')
                         .addClass(ok ? 'alert-success' : 'alert-danger')
-                        .html('<strong>' + (ok ? '{{ lang._("Success") }}' : '{{ lang._("Failed") }}') + ':</strong> ' + (data.message || ''))
+                        .html(html)
                         .show();
                 },
                 error: function () {
