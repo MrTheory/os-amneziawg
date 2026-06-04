@@ -1,0 +1,82 @@
+<?php
+
+namespace OPNsense\AmneziaWG\Migrations;
+
+use OPNsense\Base\BaseModelMigration;
+use OPNsense\Core\Config;
+
+/**
+ * Migration 1.0.0 -> 2.0.0: flat single-instance model to ArrayField collection.
+ *
+ * Legacy layout:  //OPNsense/amneziawg/instance           (flat node, no uuid)
+ * New layout:     //OPNsense/amneziawg/instances/instance (ArrayField, uuid-keyed)
+ *
+ * Also renames the single private key file to the per-instance scheme:
+ *   /usr/local/etc/amnezia/private.key -> /usr/local/etc/amnezia/<uuid>.key
+ */
+class M2_0_0 extends BaseModelMigration
+{
+    const LEGACY_PRIVKEY_FILE = '/usr/local/etc/amnezia/private.key';
+    const AMNEZIA_DIR         = '/usr/local/etc/amnezia';
+
+    public function run($model)
+    {
+        $cfgObj = Config::getInstance()->object();
+        $legacy = $cfgObj->OPNsense->amneziawg->instance ?? null;
+
+        // Idempotency: nothing to migrate when no legacy node or it was never configured
+        if ($legacy === null || empty((string)($legacy->peer_public_key ?? ''))) {
+            parent::run($model);
+            return;
+        }
+
+        // Copy every legacy field verbatim. i1-i5 stay double-encoded as stored
+        // in config.xml (R7) — decoding here would corrupt the round-trip since
+        // the new model field uses the same encoding semantics.
+        $fields = [
+            'enabled', 'name', 'description', 'interface_number',
+            'private_key', 'listen_port', 'address', 'dns', 'mtu',
+            'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4',
+            'h1', 'h2', 'h3', 'h4', 'i1', 'i2', 'i3', 'i4', 'i5',
+            'peer_public_key', 'peer_preshared_key', 'peer_endpoint',
+            'peer_allowed_ips', 'peer_persistent_keepalive',
+        ];
+        $nodes = [];
+        foreach ($fields as $field) {
+            if (isset($legacy->$field)) {
+                $nodes[$field] = (string)$legacy->$field;
+            }
+        }
+        if (empty($nodes['name'])) {
+            $nodes['name'] = 'amneziawg';
+        }
+
+        $node = $model->instances->instance->Add();
+        $node->setNodes($nodes);
+        $uuid = $node->getAttributes()['uuid'] ?? '';
+
+        // SEC-1: move the protected key file to the per-instance name so the
+        // sentinel '::file::' stored in the migrated node keeps resolving.
+        if ($uuid !== '' && file_exists(self::LEGACY_PRIVKEY_FILE)) {
+            $target = self::AMNEZIA_DIR . '/' . $uuid . '.key';
+            if (!file_exists($target)) {
+                if (!@rename(self::LEGACY_PRIVKEY_FILE, $target)) {
+                    // R2: leave the legacy file in place on failure; service-control
+                    // will log "private key file not found" for this instance and
+                    // skip it instead of breaking the whole migration.
+                    syslog(LOG_ERR, 'AmneziaWG M2_0_0: failed to rename private.key to ' . $target);
+                } else {
+                    @chmod($target, 0600);
+                }
+            }
+        }
+
+        // Remove the legacy flat node. It lives outside the model mount
+        // (//OPNsense/amneziawg/instances), so the model save will not touch it.
+        // The framework persists the migrated model after run() returns; dropping
+        // the legacy node here on the shared Config object lands in the same save.
+        unset($cfgObj->OPNsense->amneziawg->instance);
+
+        parent::run($model);
+    }
+}

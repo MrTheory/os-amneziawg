@@ -9,7 +9,7 @@
 set -e
 set -u
 
-PLUGIN_VERSION="2.7.0"
+PLUGIN_VERSION="3.0.0"
 PLUGIN_DIR="$(dirname "$0")/plugin"
 VERSION_FILE="/usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt"
 
@@ -55,6 +55,7 @@ if [ "${1:-}" = "uninstall" ]; then
     rm -f  /usr/local/opnsense/service/conf/actions.d/actions_amneziawg.conf
     rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG  # includes version.txt
     rm -f  /usr/local/etc/amnezia/private.key
+    rm -f  /usr/local/etc/amnezia/*.key
     rm -f  /usr/local/etc/amnezia/*.conf
     rmdir  /usr/local/etc/amnezia 2>/dev/null || true
     rm -rf /usr/local/opnsense/mvc/app/controllers/OPNsense/AmneziaWG
@@ -356,94 +357,43 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DETECT EXISTING CONFIG (MED-8)
-# If awg0 is already running or a .conf file exists, offer to import it
+# Multi-instance (3.0.0): checks both the new collection path and the legacy
+# flat node. A legacy node is migrated automatically by the model migration
+# (M2_0_0) on first model access after install — no manual import needed.
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "==> Step 2: Checking for existing AmneziaWG configuration..."
 
 CONFIG_XML_HAS_AWG=0
-EXISTING_CONF=""
 
-# Check if config.xml already has AmneziaWG settings
 if [ -x /usr/local/bin/php ]; then
     CONFIG_XML_HAS_AWG=$(/usr/local/bin/php -r '
         set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path());
         @include_once("config.inc");
         try {
             $cfg = OPNsense\Core\Config::getInstance()->object();
-            $pk = (string)($cfg->OPNsense->amneziawg->instance->peer_public_key ?? "");
-            echo $pk !== "" ? "1" : "0";
+            // New multi-instance path
+            $new = isset($cfg->OPNsense->amneziawg->instances->instance) ? "1" : "0";
+            // Legacy flat node (pre-3.0.0) — migrated automatically by M2_0_0
+            $legacy = (string)($cfg->OPNsense->amneziawg->instance->peer_public_key ?? "");
+            echo ($new === "1" || $legacy !== "") ? "1" : "0";
         } catch (Exception $e) {
             echo "0";
         }
     ' 2>/dev/null || echo "0")
 fi
 
-# Look for existing .conf files
-for _f in /usr/local/etc/amnezia/awg*.conf; do
-    if [ -f "$_f" ]; then
-        EXISTING_CONF="$_f"
-        break
-    fi
-done
-
 if [ "$CONFIG_XML_HAS_AWG" = "1" ]; then
     echo "[OK]  Existing configuration found in config.xml — will not overwrite."
-elif [ -n "$EXISTING_CONF" ] && [ "$CONFIG_XML_HAS_AWG" = "0" ]; then
-    echo "  Found existing config: $EXISTING_CONF"
-    printf "  Import into OPNsense config.xml? [Y/n] "
-    read -r _IMP < /dev/tty 2>/dev/null || _IMP="y"
-    case "$_IMP" in
-        [nN]*) echo "  Skipping import." ;;
-        *)
-            echo "  Importing..."
-            _CONF="$EXISTING_CONF" /usr/local/bin/php -r '
-                set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path());
-                require_once("config.inc");
-                $raw = file_get_contents(getenv("_CONF"));
-                $section = "";
-                $data = [];
-                foreach (explode("\n", $raw) as $line) {
-                    $line = trim($line);
-                    if ($line === "[Interface]") { $section = "iface"; continue; }
-                    if ($line === "[Peer]") { $section = "peer"; continue; }
-                    if (!str_contains($line, "=")) continue;
-                    [$k, $v] = array_map("trim", explode("=", $line, 2));
-                    $k = strtolower($k);
-                    if ($section === "iface") {
-                        $map = ["address"=>"address","dns"=>"dns","mtu"=>"mtu",
-                                "jc"=>"jc","jmin"=>"jmin","jmax"=>"jmax",
-                                "s1"=>"s1","s2"=>"s2","h1"=>"h1","h2"=>"h2","h3"=>"h3","h4"=>"h4",
-                                "listenport"=>"listen_port"];
-                        if (isset($map[$k])) $data[$map[$k]] = $v;
-                        if ($k === "privatekey") {
-                            $dir = "/usr/local/etc/amnezia";
-                            if (!is_dir($dir)) mkdir($dir, 0700, true);
-                            file_put_contents("$dir/private.key", trim($v) . "\n");
-                            chmod("$dir/private.key", 0600);
-                            $data["private_key"] = "::file::";
-                        }
-                    } elseif ($section === "peer") {
-                        $map = ["publickey"=>"peer_public_key","presharedkey"=>"peer_preshared_key",
-                                "endpoint"=>"peer_endpoint","allowedips"=>"peer_allowed_ips",
-                                "persistentkeepalive"=>"peer_persistent_keepalive"];
-                        if (isset($map[$k])) $data[$map[$k]] = $v;
-                    }
-                }
-                if (empty($data)) { echo "No fields parsed.\n"; exit(1); }
-                $cfg = OPNsense\Core\Config::getInstance();
-                $obj = $cfg->object();
-                foreach ($data as $field => $val) {
-                    $obj->OPNsense->amneziawg->instance->$field = $val;
-                }
-                $obj->OPNsense->amneziawg->instance->enabled = "1";
-                $obj->OPNsense->amneziawg->instance->name = "amneziawg";
-                $cfg->save();
-                echo "OK\n";
-            ' 2>/dev/null && echo "[OK]  Configuration imported." || warn "Import failed — configure manually in GUI."
-            ;;
-    esac
+    echo "      A pre-3.0.0 single-tunnel config is migrated automatically on first GUI access."
 else
+    # Stray .conf files are reported only — import via GUI 'Import .conf' dialog
+    for _f in /usr/local/etc/amnezia/awg*.conf; do
+        if [ -f "$_f" ]; then
+            echo "  Found tunnel config file: $_f"
+            echo "  Use the GUI 'Import .conf' dialog to add it as a tunnel instance."
+        fi
+    done
     echo "[OK]  No existing configuration found (clean install)."
 fi
 
@@ -475,6 +425,11 @@ install -m 0644 "$PLUGIN_DIR/mvc/app/models/OPNsense/AmneziaWG/Instance.php" \
 install -m 0644 "$PLUGIN_DIR/mvc/app/models/OPNsense/AmneziaWG/Menu/Menu.xml" \
                 /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/Menu/
 
+# Multi-instance (3.0.0): model migration from the legacy flat layout
+install -d /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/Migrations
+install -m 0644 "$PLUGIN_DIR/mvc/app/models/OPNsense/AmneziaWG/Migrations/M2_0_0.php" \
+                /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/Migrations/
+
 # IMP-6: install ACL definitions for API endpoints
 install -d /usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/ACL
 install -m 0644 "$PLUGIN_DIR/mvc/app/models/OPNsense/AmneziaWG/ACL/ACL.xml" \
@@ -498,8 +453,10 @@ install -m 0644 "$PLUGIN_DIR/mvc/app/controllers/OPNsense/AmneziaWG/Api/ImportCo
                 /usr/local/opnsense/mvc/app/controllers/OPNsense/AmneziaWG/Api/
 install -m 0644 "$PLUGIN_DIR/mvc/app/controllers/OPNsense/AmneziaWG/forms/general.xml" \
                 /usr/local/opnsense/mvc/app/controllers/OPNsense/AmneziaWG/forms/
-install -m 0644 "$PLUGIN_DIR/mvc/app/controllers/OPNsense/AmneziaWG/forms/instance.xml" \
+install -m 0644 "$PLUGIN_DIR/mvc/app/controllers/OPNsense/AmneziaWG/forms/dialogInstance.xml" \
                 /usr/local/opnsense/mvc/app/controllers/OPNsense/AmneziaWG/forms/
+# Remove the pre-3.0.0 single-instance form if present
+rm -f /usr/local/opnsense/mvc/app/controllers/OPNsense/AmneziaWG/forms/instance.xml
 
 install -d /usr/local/opnsense/mvc/app/views/OPNsense/AmneziaWG
 install -m 0644 "$PLUGIN_DIR/mvc/app/views/OPNsense/AmneziaWG/general.volt" \
@@ -524,24 +481,37 @@ echo "[OK]  Plugin files installed."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PORT CHECK (LOW-5)
-# Warn if the configured listen port is already in use by another service
+# Warn if any configured listen port is already in use by another service.
+# Multi-instance: iterates all instances (new path) + legacy flat node.
 # ─────────────────────────────────────────────────────────────────────────────
 if [ -x /usr/local/bin/php ]; then
-    _LISTEN_PORT=$(/usr/local/bin/php -r '
+    _LISTEN_PORTS=$(/usr/local/bin/php -r '
         set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path());
         @include_once("config.inc");
         try {
             $cfg = OPNsense\Core\Config::getInstance()->object();
-            echo (string)($cfg->OPNsense->amneziawg->instance->listen_port ?? "");
+            $ports = [];
+            $container = $cfg->OPNsense->amneziawg->instances ?? null;
+            if (isset($container) && isset($container->instance)) {
+                foreach ($container->instance as $inst) {
+                    $p = (string)($inst->listen_port ?? "");
+                    if ($p !== "") $ports[] = $p;
+                }
+            }
+            $legacy = (string)($cfg->OPNsense->amneziawg->instance->listen_port ?? "");
+            if ($legacy !== "") $ports[] = $legacy;
+            echo implode(" ", array_unique($ports));
         } catch (Exception $e) { echo ""; }
     ' 2>/dev/null || echo "")
-    if [ -n "$_LISTEN_PORT" ] && [ "$_LISTEN_PORT" -gt 0 ] 2>/dev/null; then
-        if sockstat -l -P udp 2>/dev/null | grep -q ":${_LISTEN_PORT} " 2>/dev/null; then
-            echo ""
-            warn "UDP port ${_LISTEN_PORT} is already in use!"
-            warn "AmneziaWG may fail to start. Check: sockstat -l -P udp | grep ${_LISTEN_PORT}"
+    for _LISTEN_PORT in $_LISTEN_PORTS; do
+        if [ "$_LISTEN_PORT" -gt 0 ] 2>/dev/null; then
+            if sockstat -l -P udp 2>/dev/null | grep -q ":${_LISTEN_PORT} " 2>/dev/null; then
+                echo ""
+                warn "UDP port ${_LISTEN_PORT} is already in use!"
+                warn "AmneziaWG may fail to start. Check: sockstat -l -P udp | grep ${_LISTEN_PORT}"
+            fi
         fi
-    fi
+    done
 fi
 
 echo ""
@@ -562,8 +532,7 @@ echo "  Check version:  configctl amneziawg version"
 echo ""
 echo "  Quick start:"
 echo "  1. Refresh browser (Ctrl+F5) → VPN → AmneziaWG"
-echo "  2. Instance tab → fill in your tunnel settings"
-echo "     or use 'Import .conf' to paste your .conf file"
+echo "  2. Tunnels tab → add a tunnel (+) or use 'Import .conf'"
 echo "  3. General tab → check 'Enable AmneziaWG'"
 echo "  4. Click Apply"
 echo ""

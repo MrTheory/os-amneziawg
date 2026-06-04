@@ -2,25 +2,35 @@
 <?php
 
 // AmneziaWG connection test — checks connectivity through the tunnel
-// Called via: configctl amneziawg testconnect
+// Called via: configctl amneziawg testconnect [awgN]
 
 require_once('/usr/local/etc/inc/config.inc');
 
 /**
- * Get interface name from config.xml
+ * Resolve target interface: optional argv token (validated) or the first
+ * enabled instance from config.xml (multi-instance default).
  */
-function awg_get_interface_name(): string
+function awg_get_interface_name(?string $requested): string
 {
-    $config = OPNsense\Core\Config::getInstance()->object();
-    $inst = $config->OPNsense->amneziawg->instance ?? null;
-    if (!isset($inst)) {
-        return 'awg0';
+    // Anti-injection: only accept awg<N> tokens from configd parameters
+    if ($requested !== null && preg_match('/^awg\d{1,2}$/', $requested)) {
+        return $requested;
     }
-    $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
-    return 'awg' . $ifnum;
+    $config = OPNsense\Core\Config::getInstance()->object();
+    $container = $config->OPNsense->amneziawg->instances ?? null;
+    if (isset($container) && isset($container->instance)) {
+        foreach ($container->instance as $inst) {
+            if ((string)($inst->enabled ?? '0') !== '1') {
+                continue;
+            }
+            $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+            return 'awg' . $ifnum;
+        }
+    }
+    return 'awg0';
 }
 
-$iface = awg_get_interface_name();
+$iface = awg_get_interface_name($argv[1] ?? null);
 
 // Check interface exists
 $out = [];

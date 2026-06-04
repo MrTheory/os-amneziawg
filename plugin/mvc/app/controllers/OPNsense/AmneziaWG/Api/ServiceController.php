@@ -112,13 +112,28 @@ class ServiceController extends ApiMutableServiceControllerBase
     }
 
     /**
-     * GET /api/amneziawg/service/diagnostics
-     * Returns interface stats as JSON
+     * Sanitize an optional interface token from the request (anti-injection).
+     * Returns 'awgN' or empty string.
+     */
+    private function requestedInterface(): string
+    {
+        $iface = (string)$this->request->get('interface', null, '');
+        if ($iface === '') {
+            $iface = (string)$this->request->getPost('interface', null, '');
+        }
+        return preg_match('/^awg\d{1,2}$/', $iface) ? $iface : '';
+    }
+
+    /**
+     * GET /api/amneziawg/service/diagnostics[?interface=awgN]
+     * Returns interface stats as JSON. Without a parameter the first
+     * enabled instance is reported (multi-instance default).
      */
     public function diagnosticsAction()
     {
+        $iface   = $this->requestedInterface();
         $backend = new Backend();
-        $output  = trim((string)$backend->configdRun('amneziawg ifstats'));
+        $output  = trim((string)$backend->configdRun(trim('amneziawg ifstats ' . $iface)));
         if (empty($output)) {
             return ['error' => 'No response from configd'];
         }
@@ -130,7 +145,7 @@ class ServiceController extends ApiMutableServiceControllerBase
     }
 
     /**
-     * POST /api/amneziawg/service/testconnect
+     * POST /api/amneziawg/service/testconnect [interface=awgN]
      * Tests connectivity through the tunnel
      */
     public function testconnectAction()
@@ -138,8 +153,9 @@ class ServiceController extends ApiMutableServiceControllerBase
         if (!$this->request->isPost()) {
             return ['result' => 'failed', 'message' => 'POST required'];
         }
+        $iface   = $this->requestedInterface();
         $backend = new Backend();
-        $output  = trim((string)$backend->configdRun('amneziawg testconnect'));
+        $output  = trim((string)$backend->configdRun(trim('amneziawg testconnect ' . $iface)));
         if (empty($output)) {
             return ['status' => 'error', 'message' => 'No response from configd'];
         }

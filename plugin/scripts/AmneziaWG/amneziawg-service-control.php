@@ -37,60 +37,77 @@ function awg_check_kmod(): bool
     return true;
 }
 
-define('AWG_PRIVKEY_FILE', '/usr/local/etc/amnezia/private.key');
 define('AWG_PRIVKEY_SENTINEL', '::file::');
 define('AWG_VERSION_FILE', '/usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt');
 define('AWG_STOPPED_FLAG', '/var/run/amneziawg_stopped.flag');
 
+// Anti-injection guard for interface tokens passed via configd parameters
+function awg_valid_iface(string $tok): bool
+{
+    return preg_match('/^awg\d{1,2}$/', $tok) === 1;
+}
+
 function awg_get_instances(): array
 {
     $config = OPNsense\Core\Config::getInstance()->object();
-    $inst = $config->OPNsense->amneziawg->instance ?? null;
-    if (!isset($inst) || (string)($inst->enabled ?? '0') !== '1') {
+    $container = $config->OPNsense->amneziawg->instances ?? null;
+    if (!isset($container) || !isset($container->instance)) {
         return [];
     }
-    $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
 
-    // SEC-1: read private key from protected file if sentinel is stored in config.xml
-    $privKeyRaw = (string)($inst->private_key ?? '');
-    if ($privKeyRaw === AWG_PRIVKEY_SENTINEL) {
-        if (!file_exists(AWG_PRIVKEY_FILE)) {
-            awg_log('ERROR: private key file not found: ' . AWG_PRIVKEY_FILE);
-            return [];
+    $result = [];
+    foreach ($container->instance as $inst) {
+        if ((string)($inst->enabled ?? '0') !== '1') {
+            continue;
         }
-        $privKeyRaw = trim(file_get_contents(AWG_PRIVKEY_FILE));
-    }
+        // R5: raw SimpleXML access — uuid is a node attribute set by ArrayField
+        $uuid  = (string)($inst->attributes()['uuid'] ?? '');
+        $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
 
-    return [[
-        'interface'                 => 'awg' . $ifnum,
-        'private_key'               => $privKeyRaw,
-        'address'                   => (string)($inst->address                   ?? ''),
-        'listen_port'               => (string)($inst->listen_port               ?? ''),
-        'dns'                       => (string)($inst->dns                       ?? ''),
-        'mtu'                       => (string)($inst->mtu                       ?? ''),
-        'jc'                        => (string)($inst->jc                        ?? ''),
-        'jmin'                      => (string)($inst->jmin                      ?? ''),
-        'jmax'                      => (string)($inst->jmax                      ?? ''),
-        's1'                        => (string)($inst->s1                        ?? ''),
-        's2'                        => (string)($inst->s2                        ?? ''),
-        's3'                        => (string)($inst->s3                        ?? ''),
-        's4'                        => (string)($inst->s4                        ?? ''),
-        'h1'                        => (string)($inst->h1                        ?? ''),
-        'h2'                        => (string)($inst->h2                        ?? ''),
-        'h3'                        => (string)($inst->h3                        ?? ''),
-        'h4'                        => (string)($inst->h4                        ?? ''),
-        // I1-I5 CPS tags contain angle brackets — double-decode HTML entities from config.xml
-        'i1'                        => html_entity_decode(html_entity_decode((string)($inst->i1 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i2'                        => html_entity_decode(html_entity_decode((string)($inst->i2 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-        'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
-        'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
-        'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
-        'peer_allowed_ips'          => (string)($inst->peer_allowed_ips          ?? ''),
-        'peer_persistent_keepalive' => (string)($inst->peer_persistent_keepalive ?? ''),
-    ]];
+        // SEC-1: read private key from protected per-uuid file if sentinel is stored
+        $privKeyRaw = (string)($inst->private_key ?? '');
+        if ($privKeyRaw === AWG_PRIVKEY_SENTINEL) {
+            $keyFile = AWG_CONF_DIR . '/' . $uuid . '.key';
+            if ($uuid === '' || !file_exists($keyFile)) {
+                awg_log('ERROR: private key file not found: ' . $keyFile . ' — skipping awg' . $ifnum);
+                continue;
+            }
+            $privKeyRaw = trim(file_get_contents($keyFile));
+        }
+
+        $result[] = [
+            'uuid'                      => $uuid,
+            'interface'                 => 'awg' . $ifnum,
+            'private_key'               => $privKeyRaw,
+            'address'                   => (string)($inst->address                   ?? ''),
+            'listen_port'               => (string)($inst->listen_port               ?? ''),
+            'dns'                       => (string)($inst->dns                       ?? ''),
+            'mtu'                       => (string)($inst->mtu                       ?? ''),
+            'jc'                        => (string)($inst->jc                        ?? ''),
+            'jmin'                      => (string)($inst->jmin                      ?? ''),
+            'jmax'                      => (string)($inst->jmax                      ?? ''),
+            's1'                        => (string)($inst->s1                        ?? ''),
+            's2'                        => (string)($inst->s2                        ?? ''),
+            's3'                        => (string)($inst->s3                        ?? ''),
+            's4'                        => (string)($inst->s4                        ?? ''),
+            'h1'                        => (string)($inst->h1                        ?? ''),
+            'h2'                        => (string)($inst->h2                        ?? ''),
+            'h3'                        => (string)($inst->h3                        ?? ''),
+            'h4'                        => (string)($inst->h4                        ?? ''),
+            // I1-I5 CPS tags contain angle brackets — double-decode HTML entities from config.xml
+            'i1'                        => html_entity_decode(html_entity_decode((string)($inst->i1 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'i2'                        => html_entity_decode(html_entity_decode((string)($inst->i2 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
+            'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
+            'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
+            'peer_allowed_ips'          => (string)($inst->peer_allowed_ips          ?? ''),
+            'peer_persistent_keepalive' => (string)($inst->peer_persistent_keepalive ?? ''),
+        ];
+    }
+    return $result;
 }
 
 function awg_sanitize(string $value): string
@@ -250,18 +267,18 @@ function awg_exec_timeout(string $cmd, int $timeout = 30): array
     return [$output, $rc];
 }
 
-function awg_up(array $inst): void
+// Multi-instance: sentinel management moved to awg_start_all()/awg_stop_all()
+// (one service-level sentinel; per-tunnel start/stop here would thrash it).
+function awg_up(array $inst): bool
 {
     $path = awg_write_conf($inst);
     if ($path === '') {
         awg_log('ERROR: failed to write config for ' . $inst['interface'] . ', skipping up');
-        return;
+        return false;
     }
     [$output, $rc] = awg_exec_timeout(AWG_QUICK . ' up ' . escapeshellarg($path) . ' 2>&1', 30);
     awg_log('up ' . $inst['interface'] . ' rc=' . $rc . ' | ' . $output);
-    if ($rc === 0) {
-        awg_start_sentinel();
-    }
+    return $rc === 0;
 }
 
 /**
@@ -316,7 +333,20 @@ function awg_down(array $inst): void
         [$output, $rc] = awg_exec_timeout(AWG_QUICK . ' down ' . escapeshellarg($path) . ' 2>&1', 30);
         awg_log('down ' . $inst['interface'] . ' rc=' . $rc . ' | ' . $output);
     }
-    awg_stop_sentinel();
+}
+
+// Count of currently existing awg* interfaces (kernel view)
+function awg_count_up(): int
+{
+    $ifOut = [];
+    exec('/sbin/ifconfig -l', $ifOut);
+    $count = 0;
+    foreach (explode(' ', trim($ifOut[0] ?? '')) as $iface) {
+        if (preg_match('/^awg\d+$/', $iface)) {
+            $count++;
+        }
+    }
+    return $count;
 }
 
 // BUG-3: awg_is_up() was declared but never used — removed.
@@ -350,7 +380,7 @@ function awg_pid_alive(int $pid): bool
 // If lock is held longer than this, force-acquire (awg-quick hung)
 define('AWG_LOCK_TIMEOUT', 120);
 
-$lockActions = ['start', 'stop', 'restart', 'reconfigure'];
+$lockActions = ['start', 'stop', 'restart', 'reconfigure', 'start_instance', 'stop_instance'];
 $lockFp = null;
 $lockFile = '/var/run/amneziawg.lock';
 if (in_array($action, $lockActions, true)) {
@@ -446,10 +476,19 @@ function awg_start_all(): bool
         awg_stop_sentinel();
         return false;
     }
+    $upCount = 0;
     foreach ($instances as $inst) {
-        awg_up($inst);
+        if (awg_up($inst)) {
+            $upCount++;
+        }
     }
-    return true;
+    // Service-level sentinel: running = at least one tunnel up
+    if ($upCount > 0) {
+        awg_start_sentinel();
+    } else {
+        awg_stop_sentinel();
+    }
+    return $upCount > 0;
 }
 
 switch ($action) {
@@ -508,6 +547,43 @@ switch ($action) {
         }
         awg_stop_all();
         awg_start_all();
+        echo "OK\n";
+        break;
+
+    case 'start_instance':
+    case 'stop_instance':
+        $ifaceArg = $argv[2] ?? '';
+        if (!awg_valid_iface($ifaceArg)) {
+            awg_log('ERROR: invalid interface token: ' . substr($ifaceArg, 0, 32));
+            echo "ERROR: invalid interface\n";
+            break;
+        }
+        if ($action === 'start_instance') {
+            if (!awg_check_binaries() || !awg_check_kmod()) {
+                echo "ERROR: binaries or kernel module not available\n";
+                break;
+            }
+            $target = null;
+            foreach (awg_get_instances() as $inst) {
+                if ($inst['interface'] === $ifaceArg) {
+                    $target = $inst;
+                    break;
+                }
+            }
+            if ($target === null) {
+                echo "ERROR: no enabled instance for " . $ifaceArg . "\n";
+                break;
+            }
+            awg_up($target);
+        } else {
+            awg_down(['interface' => $ifaceArg]);
+        }
+        // Service-level sentinel follows the number of live tunnels
+        if (awg_count_up() > 0) {
+            awg_start_sentinel();
+        } else {
+            awg_stop_sentinel();
+        }
         echo "OK\n";
         break;
 

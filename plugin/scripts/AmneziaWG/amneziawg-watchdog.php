@@ -45,18 +45,29 @@ if ($serviceEnabled !== '1') {
     exit(0);
 }
 
-// 4. Check if tunnel interface exists
-$inst = $config->OPNsense->amneziawg->instance ?? null;
-$ifnum = 0;
-if (isset($inst)) {
-    $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+// 4. Check that every enabled tunnel interface exists (multi-instance)
+$expected = [];
+$container = $config->OPNsense->amneziawg->instances ?? null;
+if (isset($container) && isset($container->instance)) {
+    foreach ($container->instance as $inst) {
+        if ((string)($inst->enabled ?? '0') !== '1') {
+            continue;
+        }
+        $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+        $expected[] = 'awg' . $ifnum;
+    }
 }
-$iface = 'awg' . $ifnum;
+if (empty($expected)) {
+    // No enabled instances — nothing to watch
+    echo "OK\n";
+    exit(0);
+}
 
 $ifOut = [];
 exec('/sbin/ifconfig -l', $ifOut);
 $existing = explode(' ', trim($ifOut[0] ?? ''));
-$ifaceExists = in_array($iface, $existing, true);
+$missing = array_values(array_diff($expected, $existing));
+$ifaceExists = empty($missing);
 
 // 5. Check PID file
 $pidAlive = false;
@@ -72,9 +83,10 @@ if (file_exists(AWG_PID_FILE)) {
     }
 }
 
-// 6. If interface is down or PID is dead — restart
+// 6. If any enabled interface is down or PID is dead — restart the service
+// (restart brings ALL enabled tunnels back up)
 if (!$ifaceExists || !$pidAlive) {
-    $reason = !$ifaceExists ? 'interface ' . $iface . ' not found' : 'PID not alive';
+    $reason = !$ifaceExists ? 'interface(s) ' . implode(',', $missing) . ' not found' : 'PID not alive';
     wdg_log('Tunnel down (' . $reason . '), restarting...');
 
     $backend = new OPNsense\Core\Backend();

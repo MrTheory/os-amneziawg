@@ -2,25 +2,35 @@
 <?php
 
 // AmneziaWG interface statistics — returns JSON with tunnel diagnostics
-// Called via: configctl amneziawg ifstats
+// Called via: configctl amneziawg ifstats [awgN]
 
 define('AWG_BIN', '/usr/local/bin/awg');
-define('AWG_PID_FILE', '/var/run/amneziawg.pid');
+define('AWG_CONF_DIR', '/usr/local/etc/amnezia');
 
 require_once('/usr/local/etc/inc/config.inc');
 
 /**
- * Get interface number from config.xml
+ * Resolve target interface: optional argv token (validated) or the first
+ * enabled instance from config.xml (multi-instance default).
  */
-function awg_get_interface_name(): string
+function awg_get_interface_name(?string $requested): string
 {
-    $config = OPNsense\Core\Config::getInstance()->object();
-    $inst = $config->OPNsense->amneziawg->instance ?? null;
-    if (!isset($inst)) {
-        return 'awg0';
+    // Anti-injection: only accept awg<N> tokens from configd parameters
+    if ($requested !== null && preg_match('/^awg\d{1,2}$/', $requested)) {
+        return $requested;
     }
-    $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
-    return 'awg' . $ifnum;
+    $config = OPNsense\Core\Config::getInstance()->object();
+    $container = $config->OPNsense->amneziawg->instances ?? null;
+    if (isset($container) && isset($container->instance)) {
+        foreach ($container->instance as $inst) {
+            if ((string)($inst->enabled ?? '0') !== '1') {
+                continue;
+            }
+            $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+            return 'awg' . $ifnum;
+        }
+    }
+    return 'awg0';
 }
 
 /**
@@ -128,17 +138,18 @@ function awg_netstat(string $iface): array
 }
 
 /**
- * Get tunnel uptime from PID file mtime.
- * The PID file is created right after successful `awg-quick up`,
- * so its mtime = tunnel start time. The PID itself is the long-dead
- * service-control.php process, so we can't use ps.
+ * Get tunnel uptime from the per-interface .conf mtime.
+ * service-control writes <iface>.conf right before `awg-quick up`, so its
+ * mtime = tunnel start time. (The shared service PID file can't serve as a
+ * per-tunnel marker in the multi-instance layout.)
  */
-function awg_uptime(): ?string
+function awg_uptime(string $iface): ?string
 {
-    if (!file_exists(AWG_PID_FILE)) {
+    $marker = AWG_CONF_DIR . '/' . $iface . '.conf';
+    if (!file_exists($marker)) {
         return null;
     }
-    $startTime = filemtime(AWG_PID_FILE);
+    $startTime = filemtime($marker);
     if ($startTime === false) {
         return null;
     }
@@ -169,11 +180,11 @@ function awg_format_bytes(int $bytes): string
 }
 
 // ── Main ──
-$iface = awg_get_interface_name();
+$iface = awg_get_interface_name($argv[1] ?? null);
 $ifStatus = awg_iface_status($iface);
 $awgData = awg_show($iface);
 $netstat = awg_netstat($iface);
-$uptime = awg_uptime();
+$uptime = awg_uptime($iface);
 
 echo json_encode([
     'interface'          => $iface,

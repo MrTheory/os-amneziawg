@@ -2,7 +2,7 @@
     $(document).ready(function () {
 
         // ── I1-I5 CPS fields contain angle brackets that get HTML-encoded
-        // by the framework. Decode entities in these fields after form load.
+        // by the framework. Decode entities in the dialog fields after load.
         function decodeIFields() {
             var el = document.createElement('textarea');
             ['i1','i2','i3','i4','i5'].forEach(function (f) {
@@ -22,17 +22,60 @@
             });
         }
 
-        // ── Load forms ────────────────────────────────────────────────
+        // ── Load general form ─────────────────────────────────────────
         mapDataToFormUI({'frm_general_settings': "/api/amneziawg/general/get"}).done(function () {
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
         });
 
-        mapDataToFormUI({'frm_instance_settings': "/api/amneziawg/instance/get"}).done(function () {
-            formatTokenizersUI();
-            $('.selectpicker').selectpicker('refresh');
+        // ── Tunnels grid ──────────────────────────────────────────────
+        $("#{{formGridInstance['table_id']}}").UIBootgrid(
+            {   'search': '/api/amneziawg/instance/search_item',
+                'get':    '/api/amneziawg/instance/get_item/',
+                'set':    '/api/amneziawg/instance/set_item/',
+                'add':    '/api/amneziawg/instance/add_item/',
+                'del':    '/api/amneziawg/instance/del_item/',
+                'toggle': '/api/amneziawg/instance/toggle_item/'
+            }
+        );
+
+        // Dialog post-load hooks: decode CPS fields, inject pending import data
+        $('#{{formGridInstance['edit_dialog_id']}}').on('shown.bs.modal', function () {
+            if (window._awgImportData) {
+                var data = window._awgImportData;
+                window._awgImportData = null;
+                Object.keys(data).forEach(function (f) {
+                    if (data[f] !== undefined && data[f] !== '') {
+                        $('[id="instance.' + f + '"]').val(data[f]);
+                    }
+                });
+            }
             decodeIFields();
         });
+
+        // ── Keypair generation (button injected into the dialog) ──────
+        var $pkInput = $('#{{formGridInstance['edit_dialog_id']}} input[id="instance.private_key"]');
+        if ($pkInput.length) {
+            $('<button type="button" id="keygen" class="btn btn-xs btn-default" style="margin-top:4px;">' +
+              '<i class="fa fa-gear"></i> {{ lang._('Generate Keypair') }}</button>')
+                .insertAfter($pkInput)
+                .click(function () {
+                    ajaxGet("/api/amneziawg/instance/gen_key_pair", {}, function (data) {
+                        if (data.status && data.status === 'ok') {
+                            $pkInput.val(data.private_key);
+                            BootstrapDialog.show({
+                                type:    BootstrapDialog.TYPE_INFO,
+                                title:   "{{ lang._('Public Key') }}",
+                                message: "{{ lang._('Share this public key with the server administrator:') }}" +
+                                         '<br><br><code style="word-break:break-all;">' + data.public_key + '</code>',
+                                buttons: [{ label: "{{ lang._('Close') }}", action: function (d) { d.close(); } }]
+                            });
+                        } else {
+                            alert(data.message || "{{ lang._('Key generation failed') }}");
+                        }
+                    });
+                });
+        }
 
         // ── Apply ─────────────────────────────────────────────────────
         $("#reconfigureAct").SimpleActionButton({
@@ -40,11 +83,7 @@
                 _statusPaused = true;
                 const dfObj = new $.Deferred();
                 saveFormToEndpoint("/api/amneziawg/general/set", 'frm_general_settings', function () {
-                    saveFormToEndpoint("/api/amneziawg/instance/set", 'frm_instance_settings', function () {
-                        dfObj.resolve();
-                    }, true, function () {
-                        dfObj.resolve();
-                    });
+                    dfObj.resolve();
                 }, true, function () {
                     dfObj.resolve();
                 });
@@ -87,31 +126,26 @@
         function updateStatus() {
             if (_statusPaused) return;
             ajaxGet("/api/amneziawg/service/tunnel_status", {}, function (data) {
-                var running = (data.status === 'ok' && data.tunnels && data.tunnels.length > 0);
+                var tunnels = (data.status === 'ok' && data.tunnels) ? data.tunnels : [];
+                var running = tunnels.length > 0;
+                var label = running
+                    ? tunnels.map(function (t) { return t.interface; }).join(', ') + ': running'
+                    : 'awg: stopped';
                 $('#badge_awg')
                     .removeClass('label-success label-danger label-default')
                     .addClass(running ? 'label-success' : 'label-danger')
-                    .text('awg: ' + (running ? 'running' : 'stopped'));
+                    .text(label);
 
                 if (!_statusPaused) {
                     $('#btnStart').prop('disabled', running);
                     $('#btnStop').prop('disabled', !running);
-                }
-
-                // Extract public key from tunnel details
-                if (running) {
-                    var details = data.tunnels[0].details || '';
-                    var match = details.match(/public key:\s*(\S+)/i);
-                    if (match) {
-                        $('#awg-pubkey-display').text(match[1]).closest('.awg-pubkey-row').show();
-                    }
                 }
             });
         }
         updateStatus();
         _statusTimer = setInterval(updateStatus, 10000);
 
-        // ── Start / Stop / Restart ────────────────────────────────────
+        // ── Start / Stop / Restart (service level: all tunnels) ───────
         function serviceAction(action, confirmMsg) {
             if (confirmMsg && !confirm(confirmMsg)) {
                 return;
@@ -158,26 +192,16 @@
         });
 
         $('#btnStop').click(function () {
-            serviceAction('stop', '{{ lang._("Stop AmneziaWG? Active tunnel will be terminated.") }}');
+            serviceAction('stop', '{{ lang._("Stop AmneziaWG? All active tunnels will be terminated.") }}');
         });
 
         $('#btnRestart').click(function () {
             serviceAction('restart', null);
         });
 
-        // ── Keypair generation ────────────────────────────────────────
-        $("#keygen").click(function () {
-            ajaxGet("/api/amneziawg/instance/gen_key_pair", {}, function (data) {
-                if (data.status && data.status === 'ok') {
-                    $('[id="instance.private_key"]').val(data.private_key);
-                    if (data.public_key) {
-                        $('#awg-pubkey-display').text(data.public_key).closest('.awg-pubkey-row').show();
-                    }
-                }
-            });
-        });
-
         // ── Import .conf parser ───────────────────────────────────────
+        // Fills the edit dialog if it is open, otherwise stashes the parsed
+        // fields and opens the Add dialog (consumed in shown.bs.modal above).
         $("#importParseBtn").click(function () {
             ajaxCall("/api/amneziawg/import/parse", {config: $("#importConfigText").val()}, function (data) {
                 if (data.status === 'ok') {
@@ -186,14 +210,25 @@
                                   'i1','i2','i3','i4','i5',
                                   'peer_public_key','peer_preshared_key','peer_endpoint',
                                   'peer_allowed_ips','peer_persistent_keepalive'];
+                    var parsed = {};
                     fields.forEach(function (f) {
                         if (data[f] !== undefined && data[f] !== '') {
-                            $('[id="instance.' + f + '"]').val(data[f]);
+                            parsed[f] = data[f];
                         }
                     });
-                    decodeIFields();
                     $("#importModal").modal('hide');
-                    $('a[href="#instance"]').tab('show');
+                    if ($('#{{formGridInstance['edit_dialog_id']}}').hasClass('in')) {
+                        // Dialog already open — fill fields directly
+                        Object.keys(parsed).forEach(function (f) {
+                            $('[id="instance.' + f + '"]').val(parsed[f]);
+                        });
+                        decodeIFields();
+                    } else {
+                        // Stash and open the Add dialog
+                        window._awgImportData = parsed;
+                        $('#{{formGridInstance['table_id']}}').closest('.bootgrid-container, div')
+                            .find('button[data-action="add"]').first().click();
+                    }
                 } else {
                     alert(data.message || "{{ lang._('Parse error') }}");
                 }
@@ -357,7 +392,7 @@
 </script>
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
-    <li class="active"><a data-toggle="tab" href="#instance">{{ lang._('Instance') }}</a></li>
+    <li class="active"><a data-toggle="tab" href="#tunnels">{{ lang._('Tunnels') }}</a></li>
     <li><a data-toggle="tab" href="#general">{{ lang._('General') }}</a></li>
     <li><a data-toggle="tab" href="#diagnostics">{{ lang._('Diagnostics') }}</a></li>
     <li><a data-toggle="tab" href="#logs">{{ lang._('Log') }}</a></li>
@@ -365,51 +400,31 @@
 
 <div class="tab-content content-box">
 
-    <div id="instance" class="tab-pane fade in active">
+    <div id="tunnels" class="tab-pane fade in active">
         {# Status badge + service control buttons #}
         <div style="padding: 10px 15px 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
             <span id="badge_awg" class="label label-default">awg: ...</span>
 
             <span style="margin-left: 4px; border-left: 1px solid #ddd; padding-left: 8px; display: inline-flex; gap: 4px;">
-                <button id="btnStart" class="btn btn-xs btn-success" title="{{ lang._('Start AmneziaWG tunnel') }}">
+                <button id="btnStart" class="btn btn-xs btn-success" title="{{ lang._('Start all enabled tunnels') }}">
                     <i class="fa fa-play"></i> {{ lang._('Start') }}
                 </button>
-                <button id="btnStop" class="btn btn-xs btn-danger" title="{{ lang._('Stop AmneziaWG tunnel') }}">
+                <button id="btnStop" class="btn btn-xs btn-danger" title="{{ lang._('Stop all tunnels') }}">
                     <i class="fa fa-stop"></i> {{ lang._('Stop') }}
                 </button>
                 <button id="btnRestart" class="btn btn-xs btn-warning" title="{{ lang._('Restart without saving config') }}">
                     <i class="fa fa-refresh"></i> {{ lang._('Restart') }}
                 </button>
             </span>
+
+            <span style="margin-left: 4px; border-left: 1px solid #ddd; padding-left: 8px;">
+                <button class="btn btn-xs btn-default" data-toggle="modal" data-target="#importModal">
+                    <i class="fa fa-upload"></i> {{ lang._('Import .conf') }}
+                </button>
+            </span>
         </div>
 
-        <div style="padding: 0 15px 8px; display: flex; gap: 6px;">
-            <button class="btn btn-sm btn-default" data-toggle="modal" data-target="#importModal">
-                <i class="fa fa-upload"></i> {{ lang._('Import .conf') }}
-            </button>
-            <button id="keygen" type="button" class="btn btn-sm btn-default" title="{{ lang._('Generate new keypair') }}">
-                <i class="fa fa-gear"></i> {{ lang._('Generate Keypair') }}
-            </button>
-        </div>
-
-        <!-- Public key display row, hidden until key is available -->
-        <div class="awg-pubkey-row" style="display:none; padding: 6px 15px 2px;">
-            <div class="form-group">
-                <label class="col-md-3 control-label">{{ lang._('Public Key') }}</label>
-                <div class="col-md-9">
-                    <p class="form-control-static">
-                        <code id="awg-pubkey-display" style="word-break:break-all;"></code>
-                        <button type="button" class="btn btn-xs btn-default" style="margin-left:8px;"
-                            onclick="navigator.clipboard && navigator.clipboard.writeText($('#awg-pubkey-display').text())"
-                            title="{{ lang._('Copy to clipboard') }}">
-                            <i class="fa fa-clipboard"></i>
-                        </button>
-                    </p>
-                    <span class="help-block">{{ lang._('Derived from your private key. Share this with the server administrator.') }}</span>
-                </div>
-            </div>
-        </div>
-        {{ partial("layout_partials/base_form", ['fields': instanceForm, 'id': 'frm_instance_settings']) }}
+        {{ partial('layout_partials/base_bootgrid_table', formGridInstance) }}
     </div>
 
     <div id="general" class="tab-pane fade in">
@@ -490,6 +505,9 @@
 
 {{ partial('layout_partials/base_apply_button', {'data_endpoint': '/api/amneziawg/service/reconfigure'}) }}
 
+{# Edit dialog for tunnel instances #}
+{{ partial("layout_partials/base_dialog", ['fields': formDialogInstance, 'id': formGridInstance['edit_dialog_id'], 'label': lang._('Edit Tunnel')]) }}
+
 <!-- Debug Info Modal -->
 <div class="modal fade" id="debugInfoModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg">
@@ -528,7 +546,7 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted">
-                    {{ lang._('Paste the contents of your AmneziaWG client .conf file. All fields will be filled automatically.') }}
+                    {{ lang._('Paste the contents of your AmneziaWG client .conf file. A new tunnel dialog will open with all fields filled automatically.') }}
                 </p>
                 <textarea id="importConfigText" class="form-control" rows="18"
                     style="font-family: monospace; font-size: 12px;"
