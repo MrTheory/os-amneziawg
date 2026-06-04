@@ -152,7 +152,7 @@ awg show awg0
 | **Enabled** | ✅ |
 | **Name** | `vpn_domains` |
 | **Type** | `Host(s)` |
-| **Content** | список доменов по одной строке (`ifconfig.me`, `example.com` и т.п.) |
+| **Content** | список доменов по одной строке (`ifconfig.me`, `cp.cloudflare.com`, `example.com` и т.п.) |
 
 **Save → Apply**. Подходит для доменов со **стабильными** IP — личные API, небольшие сайты.
 

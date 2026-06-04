@@ -25,12 +25,15 @@ $iface = awg_get_interface_name();
 // Check interface exists
 $out = [];
 exec('/sbin/ifconfig ' . escapeshellarg($iface) . ' 2>/dev/null', $out, $rc);
+// Configd treats non-zero exit as fatal and discards stdout, so the API/UI
+// would see only "Execute error". Always exit 0 — the status field in the
+// JSON payload carries success/failure semantics for the caller.
 if ($rc !== 0) {
     echo json_encode([
         'status' => 'error',
         'message' => 'Interface ' . $iface . ' does not exist',
     ]) . "\n";
-    exit(1);
+    exit(0);
 }
 
 // Test HTTP connectivity through the tunnel interface
@@ -58,12 +61,10 @@ if ($httpCode === '204' || $httpCode === '200') {
         'http_code' => (int)$httpCode,
         'message' => 'Unexpected HTTP code ' . $httpCode . ' (expected 204)',
     ]) . "\n";
-    exit(1);
 } else {
     echo json_encode([
         'status' => 'error',
         'http_code' => 0,
         'message' => 'Connection failed — no response through ' . $iface,
     ]) . "\n";
-    exit(1);
 }
