@@ -51,7 +51,7 @@ class M2_0_0 extends BaseModelMigration
             $nodes['name'] = 'amneziawg';
         }
 
-        $node = $model->instances->instance->Add();
+        $node = $model->instance->Add();
         $node->setNodes($nodes);
         $uuid = $node->getAttributes()['uuid'] ?? '';
 

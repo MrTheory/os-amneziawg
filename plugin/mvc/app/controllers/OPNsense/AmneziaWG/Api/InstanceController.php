@@ -22,7 +22,7 @@ class InstanceController extends ApiMutableModelControllerBase
     public function searchItemAction()
     {
         return $this->searchBase(
-            'instances.instance',
+            'instance',
             ['enabled', 'name', 'description', 'interface_number', 'peer_endpoint']
         );
     }
@@ -33,7 +33,7 @@ class InstanceController extends ApiMutableModelControllerBase
      */
     public function getItemAction($uuid = null)
     {
-        $result = $this->getBase('instance', 'instances.instance', $uuid);
+        $result = $this->getBase('instance', 'instance', $uuid);
         if (isset($result['instance'])) {
             $stored    = (string)($result['instance']['private_key'] ?? '');
             $keyOnDisk = $uuid !== null && file_exists($this->keyFilePath((string)$uuid));
@@ -83,7 +83,7 @@ class InstanceController extends ApiMutableModelControllerBase
         }
 
         $_POST['instance']['private_key'] = self::PRIVKEY_SENTINEL;
-        $result = $this->addBase('instance', 'instances.instance');
+        $result = $this->addBase('instance', 'instance');
 
         if (($result['result'] ?? '') !== 'failed' && $keyPrep['key'] !== null) {
             $uuid = (string)($result['uuid'] ?? '');
@@ -135,7 +135,7 @@ class InstanceController extends ApiMutableModelControllerBase
         // Always store the sentinel in config.xml, never the raw key
         $_POST['instance']['private_key'] = self::PRIVKEY_SENTINEL;
 
-        return $this->setBase('instance', 'instances.instance', $uuid);
+        return $this->setBase('instance', 'instance', $uuid);
     }
 
     /**
@@ -143,7 +143,7 @@ class InstanceController extends ApiMutableModelControllerBase
      */
     public function delItemAction($uuid)
     {
-        $result = $this->delBase('instances.instance', $uuid);
+        $result = $this->delBase('instance', $uuid);
         if (($result['result'] ?? '') === 'deleted') {
             // SEC-1: remove the orphaned key file together with the instance
             @unlink($this->keyFilePath((string)$uuid));
@@ -156,7 +156,7 @@ class InstanceController extends ApiMutableModelControllerBase
      */
     public function toggleItemAction($uuid, $enabled = null)
     {
-        return $this->toggleBase('instances.instance', $uuid, $enabled);
+        return $this->toggleBase('instance', $uuid, $enabled);
     }
 
     /**
@@ -272,7 +272,7 @@ class InstanceController extends ApiMutableModelControllerBase
         if ($submitted === '') {
             return [];
         }
-        foreach ($this->getModel()->instances->instance->iterateItems() as $nodeUuid => $node) {
+        foreach ($this->getModel()->instance->iterateItems() as $nodeUuid => $node) {
             if ($selfUuid !== null && (string)$nodeUuid === $selfUuid) {
                 continue;
             }
@@ -290,7 +290,7 @@ class InstanceController extends ApiMutableModelControllerBase
     private function nextFreeInterfaceNumber(): int
     {
         $used = [];
-        foreach ($this->getModel()->instances->instance->iterateItems() as $node) {
+        foreach ($this->getModel()->instance->iterateItems() as $node) {
             $used[(int)(string)$node->interface_number] = true;
         }
         for ($n = 0; $n <= 99; $n++) {

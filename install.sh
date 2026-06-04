@@ -515,11 +515,20 @@ if [ -x /usr/local/bin/php ]; then
 fi
 
 echo ""
-echo "==> Step 4: Restarting configd..."
+echo "==> Step 4: Running model migrations..."
+# Multi-instance (3.0.0): migrate a pre-3.0.0 flat single-instance config to
+# the ArrayField collection (M2_0_0). Safe to run repeatedly (idempotent).
+if [ -x /usr/local/bin/php ]; then
+    (cd /usr/local/opnsense/mvc && /usr/local/bin/php script/run_migrations.php 2>/dev/null \
+        | grep -i amnezia || true)
+fi
+
+echo ""
+echo "==> Step 5: Restarting configd..."
 service configd restart
 
 echo ""
-echo "==> Step 5: Clearing cache..."
+echo "==> Step 6: Clearing cache..."
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml
 rm -f /var/lib/php/tmp/PHP_errors.log
 

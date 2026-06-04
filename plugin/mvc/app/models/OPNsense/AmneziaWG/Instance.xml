@@ -4,8 +4,9 @@
     <description>AmneziaWG Instance Settings</description>
     <version>2.0.0</version>
     <items>
-        <instances>
-            <instance type="ArrayField">
+        <!-- mount already provides the <instances> container node;
+             the ArrayField below renders as <instance uuid="..."> children -->
+        <instance type="ArrayField">
                 <enabled type="BooleanField">
                     <default>1</default>
                     <Required>N</Required>
@@ -146,7 +147,6 @@
                     <MinimumValue>0</MinimumValue>
                     <MaximumValue>65535</MaximumValue>
                 </peer_persistent_keepalive>
-            </instance>
-        </instances>
+        </instance>
     </items>
 </model>
