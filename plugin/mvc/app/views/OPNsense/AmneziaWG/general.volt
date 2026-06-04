@@ -291,10 +291,46 @@
         });
 
         // ── Diagnostics tab ──────────────────────────────────────────
+        // Multi-instance: tunnel selector feeds diagnostics + testconnect.
+        function selectedDiagIface() {
+            return $('#diagIface').val() || '';
+        }
+
+        function loadDiagIfaceList() {
+            var dfObj = new $.Deferred();
+            ajaxCall('/api/amneziawg/instance/search_item', {}, function (data) {
+                var rows = (data && data.rows) ? data.rows : [];
+                rows.sort(function (a, b) {
+                    return parseInt(a.interface_number || 0, 10) - parseInt(b.interface_number || 0, 10);
+                });
+                var prev = selectedDiagIface();
+                var $sel = $('#diagIface').empty();
+                rows.forEach(function (row) {
+                    var iface = 'awg' + (row.interface_number || '0');
+                    var label = iface + ' — ' + (row.name || '') + (row.enabled !== '1' ? ' ({{ lang._("disabled") }})' : '');
+                    $sel.append($('<option>').val(iface).text(label));
+                });
+                // Keep selection across refreshes when possible
+                if (prev && $sel.find('option[value="' + prev + '"]').length) {
+                    $sel.val(prev);
+                }
+                dfObj.resolve();
+            });
+            return dfObj;
+        }
+
+        $('#diagIface').change(function () {
+            loadDiagnostics();
+        });
+
         function loadDiagnostics() {
             $('#diagLoading').show();
             $('#diagError').hide();
-            ajaxGet('/api/amneziawg/service/diagnostics', {}, function (data) {
+            var params = {};
+            if (selectedDiagIface() !== '') {
+                params['interface'] = selectedDiagIface();
+            }
+            ajaxGet('/api/amneziawg/service/diagnostics', params, function (data) {
                 $('#diagLoading').hide();
                 if (data.error) {
                     $('#diagError').text(data.error).show();
@@ -323,7 +359,7 @@
 
         var _diagAutoRefresh = null;
         $('a[href="#diagnostics"]').on('shown.bs.tab', function () {
-            loadDiagnostics();
+            loadDiagIfaceList().done(loadDiagnostics);
             if (!_diagAutoRefresh) {
                 _diagAutoRefresh = setInterval(function () {
                     if ($('#diagnostics').hasClass('active')) {
@@ -346,6 +382,7 @@
                 url: '/api/amneziawg/service/testconnect',
                 type: 'POST',
                 dataType: 'json',
+                data: selectedDiagIface() !== '' ? {interface: selectedDiagIface()} : {},
                 timeout: 20000,
                 success: function (data) {
                     $btn.prop('disabled', false).html('<i class="fa fa-bolt"></i> {{ lang._("Test Connection") }}');
@@ -390,7 +427,9 @@
             var diagDone = $.Deferred(), logDone = $.Deferred();
             var diagData = {}, logText = '';
 
-            ajaxGet('/api/amneziawg/service/diagnostics', {}, function (data) {
+            ajaxGet('/api/amneziawg/service/diagnostics',
+                    selectedDiagIface() !== '' ? {interface: selectedDiagIface()} : {},
+                    function (data) {
                 diagData = data;
                 diagDone.resolve();
             });
@@ -489,6 +528,8 @@
     <div id="diagnostics" class="tab-pane fade in">
         <div style="padding: 15px;">
             <div style="margin-bottom: 10px; display: flex; gap: 6px; align-items: center;">
+                <select id="diagIface" class="form-control" style="width: auto; min-width: 180px; display: inline-block;"
+                        title="{{ lang._('Tunnel to inspect') }}"></select>
                 <button id="btnDiagRefresh" class="btn btn-sm btn-default">
                     <i class="fa fa-refresh"></i> {{ lang._('Refresh') }}
                 </button>
