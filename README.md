@@ -422,7 +422,7 @@ tcpdump -ni <wan-iface> port 853 -c 5
 
 **Принцип:** правило Pass с gateway=AWG_GW + ниже Block без gateway. Когда AWG_GW Online — Pass работает (quick). Когда AWG_GW Down — Pass пропускается, срабатывает Block.
 
-Сначала убедиться, что **System → Settings → General → Skip rules when gateway is down** включено (обычно по умолчанию).
+Сначала включить **Firewall → Settings → Advanced → Gateway Monitoring → Skip rules when gateway is down** (по умолчанию **выключено**: без этой галки при падении шлюза Pass-правило не пропускается, а отправляет трафик через шлюз по умолчанию — т.е. в WAN, мимо kill switch).
 
 **Firewall → Rules → LAN → +Add**:
 
@@ -446,6 +446,83 @@ tcpdump -ni <wan-iface> port 853 -c 5
 ```
 
 **Проверка:** `configctl amneziawg stop` → с клиента `curl --max-time 5 https://ifconfig.me` должен таймаутиться, а `curl https://api.ipify.org` — отдавать WAN-IP. Запустить туннель обратно: `configctl amneziawg start && pfctl -F state`.
+
+### Failover на два туннеля (gateway groups)
+
+**Зачем.** Один VPS — единая точка отказа: если сервер упал или заблокирован, селективные направления остаются без доступа (kill switch их заблокирует). Второй AWG-туннель к резервному VPS плюс gateway group дают автоматическое переключение: упал основной — трафик уходит в резервный, поднялся — вернулся обратно.
+
+Предполагается, что основной туннель `awg0` уже настроен по §3–§7 (интерфейс `AWG0`, шлюз `AWG0_GW`).
+
+#### 1. Второй туннель и интерфейс
+
+1. Импортировать `.conf` резервного VPS (§3) — туннель получит `awg1`.
+2. Назначить интерфейс (§4): **Interfaces → Assignments** → `awg1` → появится `opt2`. **Description:** `AWG1`, IPv4 Configuration Type: `None`, MTU/MSS пустые.
+3. Добавить Outbound NAT для нового интерфейса (§7): то же правило, но **Interface:** `AWG1`.
+
+#### 2. Шлюзы с мониторингом
+
+Для failover шлюзы должен мониторить dpinger — галку **Disable Gateway Monitoring** из §4 нужно **снять**. **System → Gateways → Configuration**:
+
+| Поле | AWG0_GW | AWG1_GW |
+|------|---------|---------|
+| **Interface** | `AWG0` | `AWG1` |
+| **IP address** | `10.8.1.1` (сервер в туннеле) | см. ⚠️ ниже |
+| **Far Gateway** | ✅ | ✅ |
+| **Disable Gateway Monitoring** | ☐ | ☐ |
+| **Monitor IP** | `1.0.0.1` | `9.9.9.9` |
+
+- **Monitor IP** у каждого шлюза должен быть уникальным и не использоваться клиентами напрямую: OPNsense добавляет host-route монитора через «свой» туннель, и dpinger пингует именно сквозь него.
+- ⚠️ **Если оба VPS выдали клиентам одну подсеть** (типовой случай — сервер везде `10.8.1.1`), OPNsense не даст создать второй шлюз с тем же IP. Для PtP-туннеля адрес next-hop формален: укажи любой свободный IP из туннельной подсети (например `10.8.1.5`) — пакеты всё равно уходят в интерфейс `awg1`, и сервер на той стороне их принимает.
+
+#### 3. Gateway group
+
+**System → Gateways → Group → +Add**:
+
+| Поле | Значение |
+|------|----------|
+| **Group Name** | `AWG_FO` |
+| **AWG0_GW** | `Tier 1` |
+| **AWG1_GW** | `Tier 2` |
+| **Trigger Level** | `Packet Loss or High Latency` |
+
+#### 4. Kill switch для группы
+
+Включить **Firewall → Settings → Advanced → Gateway Monitoring → Skip rules when gateway is down** (см. [раздел kill switch](#kill-switch--блокировать-vpn-трафик-если-туннель-упал) — там объяснено, почему без галки трафик утечёт в WAN).
+
+В Pass-правиле из §6 заменить **Gateway**: `AWG0_GW` → `AWG_FO`. Block-правило kill switch остаётся без изменений:
+
+```
+1. Pass  LAN net → vpn_domains,google_nets → AWG_FO   (quick)
+2. Block LAN net → vpn_domains,google_nets            (kill switch)
+3. Pass  LAN net → any                                 (default allow)
+```
+
+Пока жив хотя бы один шлюз группы, Pass направляет трафик в живой Tier; когда мертвы оба — Pass пропускается (skip rules), срабатывает Block.
+
+⚠️ **Пересекающиеся алиасы.** Если часть направлений должна ходить через «свою» группу с обратным порядком Tier (например, отдельная группа для сервиса, которому предпочтителен резервный VPS), а её IP входят и в общий алиас (так, Anthropic хостится на GCP — их сети есть в `google_nets`), пара Pass+Block частного случая обязана стоять **выше** общей пары: иначе quick-правило общей группы перехватит трафик.
+
+#### 5. Watchdog — автоподнятие упавшего туннеля
+
+**VPN → AmneziaWG → General → Enable Watchdog → Apply**. Каждую минуту cron проверяет включённые туннели и поднимает только упавшие — живые не трогаются, их сессии сохраняются. После поднятия интерфейса шлюз выходит из down, и gateway group сама возвращает трафик на Tier 1.
+
+#### 6. Проверка
+
+```sh
+# Базовый путь (с LAN-клиента): должен показать IP основного VPS
+curl --max-time 10 https://ifconfig.me
+
+# Failover: погасить основной туннель (per-tunnel stop ставит флаг — watchdog не вмешается)
+configctl amneziawg stop_instance awg0
+# Подождать ~30-60 с (dpinger пометит шлюз down) → curl показывает IP резервного VPS
+
+# Kill switch: погасить и резервный
+configctl amneziawg stop_instance awg1
+# curl должен таймаутиться — утечки в WAN нет
+
+# Восстановление (сервисный start снимает все стоп-флаги)
+configctl amneziawg start
+# curl снова показывает IP основного VPS
+```
 
 ### Автообновление CIDR-блоков Google
 
