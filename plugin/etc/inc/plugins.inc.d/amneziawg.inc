@@ -23,12 +23,10 @@ function amneziawg_xmlrpc_sync()
 
 function amneziawg_cron()
 {
-    return [
-        ['amneziawg_cron_watchdog', '/', '*', '*', '*', '*'],
-    ];
-}
-
-function amneziawg_cron_watchdog()
-{
-    (new OPNsense\Core\Backend())->configdRun('amneziawg watchdog');
+    // Unconditional every-minute job: the watchdog script itself exits
+    // immediately when the watchdog flag is off, so no crontab regeneration
+    // is needed when the flag is toggled in the GUI.
+    $jobs = [];
+    $jobs[]['autocron'] = ['/usr/local/sbin/configctl -d amneziawg watchdog', '*'];
+    return $jobs;
 }

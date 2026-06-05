@@ -26,6 +26,10 @@
 
 ### Исправления
 
+**Watchdog-cron никогда не создавался.** Хук `amneziawg_cron()` возвращал запись в неверном формате (имя PHP-функции вместо shell-команды, без ключа `autocron`) — ядро OPNsense молча игнорировало её, и запись в crontab не попадала: watchdog не запускался вовсе. Теперь хук отдаёт `['autocron' => ['/usr/local/sbin/configctl -d amneziawg watchdog', '*']]` — ежеминутный запуск; сам скрипт мгновенно выходит, если флаг watchdog выключен.
+
+**Шлюз навсегда «down» после рестарта туннеля.** `awg-quick` пересоздаёт интерфейс, при этом теряются host-route монитор-IP и состояние dpinger — назначенный на туннель шлюз с мониторингом оставался «down», и gateway group не возвращала трафик на Tier 1. Теперь `awg_up()` после успешного поднятия дёргает `configctl -d interface newip awgN` (rc.newwanip, как в core-плагине os-wireguard) — маршруты и dpinger восстанавливаются автоматически; для неназначенных интерфейсов это no-op.
+
 **Пустой Edit-диалог грида.** `mapDataToFormUI` в OPNsense матчит форму диалога по `id.split('-')[0]` — дефис в id грида (`grid-instances`) ломал загрузку данных. Id гридов/диалогов теперь без дефисов (как в core-плагинах).
 
 **Кнопка Add в OPNsense 26.x.** Tabulator-грид 26.x заменяет исходную таблицу — `tfoot button[data-action=add]` исчезает из DOM. Import теперь кликает `button.command-add` (с fallback на legacy-селектор для 25.x).

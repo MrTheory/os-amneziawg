@@ -295,6 +295,15 @@ function awg_up(array $inst): bool
     }
     [$output, $rc] = awg_exec_timeout(AWG_QUICK . ' up ' . escapeshellarg($path) . ' 2>&1', 30);
     awg_log('up ' . $inst['interface'] . ' rc=' . $rc . ' | ' . $output);
+    if ($rc === 0) {
+        // awg-quick recreates the interface, wiping OPNsense state tied to it
+        // (gateway monitor host-routes, dpinger). Fire rc.newwanip so the system
+        // reapplies routes and restarts dpinger for assigned interfaces — same
+        // as the core os-wireguard plugin does. Detached: best-effort, must not
+        // block multi-tunnel startup; a no-op for unassigned interfaces.
+        exec('/usr/local/sbin/configctl -d interface newip '
+            . escapeshellarg($inst['interface']) . ' >/dev/null 2>&1');
+    }
     return $rc === 0;
 }
 
