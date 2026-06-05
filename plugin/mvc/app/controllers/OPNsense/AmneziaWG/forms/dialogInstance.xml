@@ -10,6 +10,19 @@
         </grid_view>
     </field>
     <field>
+        <!-- Grid-only virtual column (BACKLOG #3): value comes from
+             searchItemAction enrichment, not from the model; type 'ignore'
+             keeps it out of the edit dialog -->
+        <id>instance.runtime</id>
+        <label>Status</label>
+        <type>ignore</type>
+        <grid_view>
+            <formatter>tunnelstatus</formatter>
+            <sortable>false</sortable>
+            <width>110</width>
+        </grid_view>
+    </field>
+    <field>
         <id>instance.name</id>
         <label>Name</label>
         <type>text</type>

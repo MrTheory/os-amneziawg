@@ -16,15 +16,49 @@ class InstanceController extends ApiMutableModelControllerBase
     const PRIVKEY_DIR      = '/usr/local/etc/amnezia';
     const PRIVKEY_SENTINEL = '::file::';
 
+    // Handshake older than this is reported as 'no_handshake' (matches
+    // the staleness threshold in amneziawg-testconnect.php)
+    const HANDSHAKE_FRESH_SEC = 180;
+
     /**
      * Search/list instances for the bootgrid.
+     * Rows are enriched with a 'runtime' field (BACKLOG #3):
+     *   running      — interface up, fresh handshake
+     *   no_handshake — interface up, but no/stale handshake
+     *   stopped      — interface does not exist
+     * Enrichment is skipped (runtime='') when configd is unreachable.
      */
     public function searchItemAction()
     {
-        return $this->searchBase(
+        $result = $this->searchBase(
             'instance',
             ['enabled', 'name', 'description', 'interface_number', 'peer_endpoint']
         );
+
+        $status = json_decode((string)(new Backend())->configdRun('amneziawg status'), true);
+        $live = null;
+        if (is_array($status)) {
+            $live = [];
+            foreach (($status['tunnels'] ?? []) as $tunnel) {
+                $live[(string)($tunnel['interface'] ?? '')] = (int)($tunnel['latest_handshake'] ?? 0);
+            }
+        }
+        foreach ($result['rows'] as &$row) {
+            if ($live === null) {
+                $row['runtime'] = '';
+                continue;
+            }
+            $iface = 'awg' . (int)($row['interface_number'] ?? 0);
+            if (!array_key_exists($iface, $live)) {
+                $row['runtime'] = 'stopped';
+            } elseif ($live[$iface] > 0 && (time() - $live[$iface]) <= self::HANDSHAKE_FRESH_SEC) {
+                $row['runtime'] = 'running';
+            } else {
+                $row['runtime'] = 'no_handshake';
+            }
+        }
+        unset($row);
+        return $result;
     }
 
     /**

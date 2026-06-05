@@ -647,10 +647,23 @@ switch ($action) {
             if (preg_match('/^awg\d+$/', $iface)) {
                 $awgShow = [];
                 exec(AWG_BIN . ' show ' . escapeshellarg($iface) . ' 2>/dev/null', $awgShow);
+                // Newest peer handshake epoch (0 = never) — feeds the grid
+                // runtime-status column (BACKLOG #3)
+                $hsOut = [];
+                exec(AWG_BIN . ' show ' . escapeshellarg($iface) . ' latest-handshakes 2>/dev/null', $hsOut);
+                $newest = 0;
+                foreach ($hsOut as $line) {
+                    $parts = preg_split('/\s+/', trim($line));
+                    $ts = (int)($parts[1] ?? 0);
+                    if ($ts > $newest) {
+                        $newest = $ts;
+                    }
+                }
                 $tunnels[] = [
-                    'interface' => $iface,
-                    'up'        => true,
-                    'details'   => implode("\n", $awgShow),
+                    'interface'        => $iface,
+                    'up'               => true,
+                    'latest_handshake' => $newest,
+                    'details'          => implode("\n", $awgShow),
                 ];
             }
         }

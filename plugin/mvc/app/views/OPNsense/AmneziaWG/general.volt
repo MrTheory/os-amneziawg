@@ -59,6 +59,8 @@
                     }
                     _statusPaused = false;
                     updateStatus();
+                    // Refresh the runtime-status column
+                    $('#{{formGridInstance['table_id']}}').bootgrid('reload');
                 },
                 error: function () {
                     $icon.attr('class', orig);
@@ -87,6 +89,23 @@
                         classname: 'fa fa-stop fa-fw text-danger',
                         title: "{{ lang._('Stop') }}",
                         sequence: 2
+                    }
+                },
+                'options': {
+                    'formatters': {
+                        // BACKLOG #3: runtime status from searchItemAction enrichment
+                        'tunnelstatus': function (column, row) {
+                            switch (row.runtime) {
+                                case 'running':
+                                    return '<span class="label label-success">{{ lang._('running') }}</span>';
+                                case 'no_handshake':
+                                    return '<span class="label label-warning">{{ lang._('no handshake') }}</span>';
+                                case 'stopped':
+                                    return '<span class="label label-danger">{{ lang._('stopped') }}</span>';
+                                default:
+                                    return '<span class="label label-default">?</span>';
+                            }
+                        }
                     }
                 }
             }
