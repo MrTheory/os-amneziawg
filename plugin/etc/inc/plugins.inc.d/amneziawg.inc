@@ -16,6 +16,35 @@ function amneziawg_services()
     return $services;
 }
 
+function amneziawg_devices()
+{
+    // Register awgN as volatile plugin devices. Without this, assigned
+    // awg interfaces (which do not exist at boot before the service starts)
+    // trigger is_interface_mismatch() in console.inc and OPNsense silently
+    // resets the whole interface assignment to two-NIC defaults
+    // ("Console assignment of interfaces"), wiping LAN/WAN/optN mapping.
+    $names = [];
+
+    foreach ((new OPNsense\AmneziaWG\Instance())->instance->iterateItems() as $node) {
+        if (!empty((string)$node->enabled)) {
+            $device = 'awg' . (string)$node->interface_number;
+            $names[$device] = [
+                'descr' => sprintf('%s (AmneziaWG - %s)', $device, (string)$node->name),
+                'ifdescr' => (string)$node->name,
+                'name' => $device,
+            ];
+        }
+    }
+
+    return [[
+        'configurable' => false,
+        'pattern' => '^awg\d+',
+        'type' => 'amneziawg',
+        'volatile' => true,
+        'names' => $names,
+    ]];
+}
+
 function amneziawg_xmlrpc_sync()
 {
     return [];
