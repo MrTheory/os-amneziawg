@@ -4,18 +4,35 @@
         <label>Enabled</label>
         <type>checkbox</type>
         <help>Enable this AmneziaWG tunnel</help>
+        <grid_view>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
     </field>
     <field>
-        <id>instance.interface_number</id>
-        <label>Interface Number</label>
-        <type>text</type>
-        <help>Interface suffix number (0-99). Interface will be named awg{N}. Default: 0 (awg0).</help>
+        <!-- Grid-only virtual column (BACKLOG #3): value comes from
+             searchItemAction enrichment, not from the model; type 'ignore'
+             keeps it out of the edit dialog -->
+        <id>instance.runtime</id>
+        <label>Status</label>
+        <type>ignore</type>
+        <grid_view>
+            <formatter>tunnelstatus</formatter>
+            <sortable>false</sortable>
+            <width>110</width>
+        </grid_view>
     </field>
     <field>
         <id>instance.name</id>
         <label>Name</label>
         <type>text</type>
-        <help>Alphanumeric name for the tunnel interface (e.g. awg0), max 15 chars</help>
+        <help>Alphanumeric name for the tunnel, max 15 chars</help>
+    </field>
+    <field>
+        <id>instance.interface_number</id>
+        <label>Interface Number</label>
+        <type>text</type>
+        <help>Interface suffix number (0-99), must be unique per tunnel. Interface will be named awg{N}.</help>
     </field>
     <field>
         <id>instance.description</id>
@@ -23,34 +40,55 @@
         <type>text</type>
     </field>
     <field>
+        <id>instance.peer_endpoint</id>
+        <label>Endpoint</label>
+        <type>text</type>
+        <help>Server address and port, e.g. 1.2.3.4:51820</help>
+    </field>
+    <field>
         <id>instance.private_key</id>
         <label>Private Key</label>
         <type>text</type>
-        <help>Your private key. Use the gear button to generate a new keypair.</help>
+        <help>Your private key. Use the Generate Keypair button below to create a new one.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.address</id>
         <label>Tunnel Address</label>
         <type>text</type>
         <help>Interface address assigned by the server, e.g. 10.8.1.2/24</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.dns</id>
         <label>DNS</label>
         <type>text</type>
         <help>DNS servers (comma-separated). Leave empty to use OPNsense Unbound.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.listen_port</id>
         <label>Listen Port</label>
         <type>text</type>
         <help>Local UDP port (optional, leave empty for random)</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.mtu</id>
         <label>MTU</label>
         <type>text</type>
         <help>Leave empty for default (1420). Reduce to 1280-1380 if experiencing issues.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <type>header</type>
@@ -61,66 +99,99 @@
         <label>Jc</label>
         <type>text</type>
         <help>Number of junk packets before each handshake (1-128). From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.jmin</id>
         <label>Jmin</label>
         <type>text</type>
         <help>Minimum junk packet size in bytes. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.jmax</id>
         <label>Jmax</label>
         <type>text</type>
         <help>Maximum junk packet size in bytes. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.s1</id>
         <label>S1</label>
         <type>text</type>
         <help>Extra bytes added before init message. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.s2</id>
         <label>S2</label>
         <type>text</type>
         <help>Extra bytes added before response message. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.s3</id>
         <label>S3</label>
         <type>text</type>
         <help>AWG 2.0: extra bytes added before cookie message (0-1280). From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.s4</id>
         <label>S4</label>
         <type>text</type>
         <help>AWG 2.0: extra bytes added before transport data message (0-1280). From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.h1</id>
         <label>H1</label>
         <type>text</type>
         <help>Header ID for init packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H2/H3/H4. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.h2</id>
         <label>H2</label>
         <type>text</type>
         <help>Header ID for response packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H3/H4. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.h3</id>
         <label>H3</label>
         <type>text</type>
         <help>Header ID for cookie packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H4. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.h4</id>
         <label>H4</label>
         <type>text</type>
         <help>Header ID for data packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H3. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <type>header</type>
@@ -131,30 +202,45 @@
         <label>I1</label>
         <type>text</type>
         <help>CPS init packet template using tags: &lt;b 0xHEX&gt; &lt;r N&gt; &lt;rd N&gt; &lt;rc N&gt; &lt;t&gt; &lt;c&gt;. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.i2</id>
         <label>I2</label>
         <type>text</type>
         <help>CPS packet 2 template. Ignored if I1 is empty. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.i3</id>
         <label>I3</label>
         <type>text</type>
         <help>CPS packet 3 template. Ignored if I1 is empty. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.i4</id>
         <label>I4</label>
         <type>text</type>
         <help>CPS packet 4 template. Ignored if I1 is empty. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.i5</id>
         <label>I5</label>
         <type>text</type>
         <help>CPS packet 5 template. Ignored if I1 is empty. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <type>header</type>
@@ -165,29 +251,35 @@
         <label>Public Key</label>
         <type>text</type>
         <help>Server public key. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.peer_preshared_key</id>
         <label>Pre-Shared Key</label>
         <type>text</type>
         <help>Optional pre-shared key for additional security.</help>
-    </field>
-    <field>
-        <id>instance.peer_endpoint</id>
-        <label>Endpoint</label>
-        <type>text</type>
-        <help>Server address and port, e.g. 1.2.3.4:51820</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.peer_allowed_ips</id>
         <label>Allowed IPs</label>
         <type>text</type>
         <help>Use 0.0.0.0/0 to route all traffic through the tunnel.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
     <field>
         <id>instance.peer_persistent_keepalive</id>
         <label>Keepalive</label>
         <type>text</type>
         <help>Send keepalive every N seconds (e.g. 25). Required when behind NAT.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
 </form>

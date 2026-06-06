@@ -45,18 +45,35 @@ if ($serviceEnabled !== '1') {
     exit(0);
 }
 
-// 4. Check if tunnel interface exists
-$inst = $config->OPNsense->amneziawg->instance ?? null;
-$ifnum = 0;
-if (isset($inst)) {
-    $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+// 4. Check that every enabled tunnel interface exists (multi-instance).
+// Interfaces stopped per-row from the grid carry a per-instance flag
+// (/var/run/amneziawg_stopped_awgN.flag) and are not watched.
+$expected = [];
+$container = $config->OPNsense->amneziawg->instances ?? null;
+if (isset($container) && isset($container->instance)) {
+    foreach ($container->instance as $inst) {
+        if ((string)($inst->enabled ?? '0') !== '1') {
+            continue;
+        }
+        $ifnum = !empty((string)($inst->interface_number ?? '')) ? (int)(string)$inst->interface_number : 0;
+        $iface = 'awg' . $ifnum;
+        if (file_exists('/var/run/amneziawg_stopped_' . $iface . '.flag')) {
+            continue;
+        }
+        $expected[] = $iface;
+    }
 }
-$iface = 'awg' . $ifnum;
+if (empty($expected)) {
+    // No enabled instances — nothing to watch
+    echo "OK\n";
+    exit(0);
+}
 
 $ifOut = [];
 exec('/sbin/ifconfig -l', $ifOut);
 $existing = explode(' ', trim($ifOut[0] ?? ''));
-$ifaceExists = in_array($iface, $existing, true);
+$missing = array_values(array_diff($expected, $existing));
+$ifaceExists = empty($missing);
 
 // 5. Check PID file
 $pidAlive = false;
@@ -72,14 +89,26 @@ if (file_exists(AWG_PID_FILE)) {
     }
 }
 
-// 6. If interface is down or PID is dead — restart
-if (!$ifaceExists || !$pidAlive) {
-    $reason = !$ifaceExists ? 'interface ' . $iface . ' not found' : 'PID not alive';
-    wdg_log('Tunnel down (' . $reason . '), restarting...');
-
+// 6. Recovery. Granular: bring up only the fallen tunnels so live ones
+// keep their sessions (start_instance also repairs the sentinel PID).
+// Full restart only when the sentinel died with all tunnels intact.
+if (!$ifaceExists) {
+    wdg_log('Tunnel(s) down: ' . implode(',', $missing) . ' — starting individually...');
     $backend = new OPNsense\Core\Backend();
-    $output = trim((string)$backend->configdRun('amneziawg restart'));
-    wdg_log('Restart result: ' . substr($output, 0, 200));
+    $results = [];
+    foreach ($missing as $iface) {
+        $output = trim((string)$backend->configdRun('amneziawg start_instance ' . $iface));
+        wdg_log('start_instance ' . $iface . ' result: ' . substr($output, 0, 200));
+        $results[] = $iface . ': ' . $output;
+    }
+    echo implode("\n", $results) . "\n";
+} elseif (!$pidAlive) {
+    // Tunnels are fine, only the sentinel PID died — repair it without
+    // bouncing tunnels (and without resetting per-row stop flags).
+    wdg_log('Sentinel PID not alive, repairing...');
+    $backend = new OPNsense\Core\Backend();
+    $output = trim((string)$backend->configdRun('amneziawg sentinel_repair'));
+    wdg_log('Sentinel repair result: ' . substr($output, 0, 200));
     echo $output . "\n";
 } else {
     echo "OK\n";
