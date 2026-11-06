@@ -161,7 +161,7 @@
         <id>instance.h1</id>
         <label>H1</label>
         <type>text</type>
-        <help>Header ID for init packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H2/H3/H4. From server config.</help>
+        <help>Header ID for init packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H2/H3/H4. Leave empty, or set 1, when the server does not obfuscate headers. From server config.</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>
@@ -170,7 +170,7 @@
         <id>instance.h2</id>
         <label>H2</label>
         <type>text</type>
-        <help>Header ID for response packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H3/H4. From server config.</help>
+        <help>Header ID for response packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H3/H4. Leave empty, or set 2, when the server does not obfuscate headers. From server config.</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>
@@ -179,7 +179,7 @@
         <id>instance.h3</id>
         <label>H3</label>
         <type>text</type>
-        <help>Header ID for cookie packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H4. From server config.</help>
+        <help>Header ID for cookie packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H4. Leave empty, or set 3, when the server does not obfuscate headers. From server config.</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>
@@ -188,7 +188,7 @@
         <id>instance.h4</id>
         <label>H4</label>
         <type>text</type>
-        <help>Header ID for data packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H3. From server config.</help>
+        <help>Header ID for data packets — number or range (e.g. 12345 or 12345-67890), values 5-4294967295. Ranges must not overlap with H1/H2/H3. Leave empty, or set 4, when the server does not obfuscate headers. From server config.</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>
@@ -238,6 +238,91 @@
         <label>I5</label>
         <type>text</type>
         <help>CPS packet 5 template. Ignored if I1 is empty. From server config.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <type>header</type>
+        <label>AmneziaWG 3 Parameters</label>
+    </field>
+    <field>
+        <id>instance.header_protection_key</id>
+        <label>Header Protection Key</label>
+        <type>text</type>
+        <help>32-byte Base64 key. Required when the server profile uses AWG3 header protection.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.content_padding_addition</id>
+        <label>Content Padding Addition</label>
+        <type>text</type>
+        <help>AWG3 padding range in bytes, for example 2-10.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.rekey_after_time</id>
+        <label>Rekey After Time</label>
+        <type>text</type>
+        <help>AWG3 rekey interval in seconds or range, for example 110-120.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.rekey_timeout</id>
+        <label>Rekey Timeout</label>
+        <type>text</type>
+        <help>AWG3 handshake retry timeout in seconds or range.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.reject_after_time</id>
+        <label>Reject After Time</label>
+        <type>text</type>
+        <help>AWG3 peer rejection interval in seconds or range.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.keepalive_timeout</id>
+        <label>Keepalive Timeout</label>
+        <type>text</type>
+        <help>AWG3 keepalive timeout in seconds or range.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.max_handshake_attempts</id>
+        <label>Max Handshake Attempts</label>
+        <type>text</type>
+        <help>AWG3 maximum handshake attempts in a number or range.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.random_trailers</id>
+        <label>Random Trailers</label>
+        <type>checkbox</type>
+        <help>Enable AWG3 random transport trailers.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.disable_cookies</id>
+        <label>Disable Cookies</label>
+        <type>checkbox</type>
+        <help>Disable AWG3 cookie replies when required by the server profile.</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>

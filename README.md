@@ -21,6 +21,8 @@ AmneziaWG — обфусцированный форк WireGuard для обхо�
   - **S3, S4** — handshake cookie / transport message padding
   - **H1–H4** — magic headers с поддержкой **диапазонов** (`12345-67890`)
   - **I1–I5** — CPS (Custom Protocol Signature) пакеты для DPI-маскировки
+- **AmneziaWG 3 для FreeBSD**: HeaderProtectionKey, AWG3 timing/padding ranges,
+  RandomTrailers, DisableCookies and ranged PersistentKeepalive
 - Генерация keypair прямо в диалоге туннеля — публичный ключ отображается для передачи администратору сервера
 - Приватные ключи в защищённых файлах `<uuid>.key` (0600, один на туннель) — не попадают в бэкапы конфига
 - Управление через GUI: **VPN → AmneziaWG** — сервисные кнопки Start/Stop/Restart + per-row кнопки в гриде
@@ -37,17 +39,15 @@ AmneziaWG — обфусцированный форк WireGuard для обхо�
 
 ## Системные требования
 
-| Компонент | Версия |
-|---|---|
 | OPNsense | 25.x / 26.x |
-| FreeBSD | 14.x amd64 |
-| AmneziaWG server | Любая актуальная версия (AWG 1.x или 2.x) |
-| `amnezia-kmod` | 2.0.x (для поддержки S3/S4, H-диапазонов, I1-I5) |
-| `amnezia-tools` | 1.0.20250903+ |
+| FreeBSD | 15.1+ for the AWG3 backend (14.x remains AWG2-compatible) |
+| AmneziaWG server | Any current version matching the client profile |
+| `amnezia-kmod` | AWG3-capable FreeBSD fork (`if_amn.ko`) |
+| `amnezia-tools` | AWG3-capable FreeBSD fork (`awg`) |
 
-> Пакеты `amnezia-kmod` и `amnezia-tools` отсутствуют в репозитории OPNsense. Установщик автоматически подключает FreeBSD quarterly repo и ставит их через `pkg install` (с подтверждением). Архитектуры ARM и i386 могут потребовать ручной установки.
-
-> Если используется `amnezia-kmod` 1.x — параметры AWG 2.0 (S3, S4, диапазоны H1-H4, I1-I5) в `.conf` должны отсутствовать.
+> В production не устанавливай AWG3-модуль поверх работающего роутера без отдельного
+> окна отката: модуль и tools должны быть согласованы с FreeBSD 15.1 ABI.
+> AWG2-профили остаются совместимыми при отключённых AWG3-полях.
 
 ---
 

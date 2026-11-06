@@ -90,22 +90,22 @@
                 <h1 type="TextField">
                     <Required>N</Required>
                     <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
-                    <ValidationMessage>H1 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
+                    <ValidationMessage>H1 must be 1 (header obfuscation off) or a number/range in 5-4294967295 (e.g. 12345 or 12345-67890)</ValidationMessage>
                 </h1>
                 <h2 type="TextField">
                     <Required>N</Required>
                     <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
-                    <ValidationMessage>H2 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
+                    <ValidationMessage>H2 must be 2 (header obfuscation off) or a number/range in 5-4294967295 (e.g. 12345 or 12345-67890)</ValidationMessage>
                 </h2>
                 <h3 type="TextField">
                     <Required>N</Required>
                     <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
-                    <ValidationMessage>H3 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
+                    <ValidationMessage>H3 must be 3 (header obfuscation off) or a number/range in 5-4294967295 (e.g. 12345 or 12345-67890)</ValidationMessage>
                 </h3>
                 <h4 type="TextField">
                     <Required>N</Required>
                     <mask>/^\d{1,10}(-\d{1,10})?$/</mask>
-                    <ValidationMessage>H4 must be a number or range (e.g. 12345 or 12345-67890), values 5-4294967295</ValidationMessage>
+                    <ValidationMessage>H4 must be 4 (header obfuscation off) or a number/range in 5-4294967295 (e.g. 12345 or 12345-67890)</ValidationMessage>
                 </h4>
                 <i1 type="TextField">
                     <Required>N</Required>
@@ -122,6 +122,43 @@
                 <i5 type="TextField">
                     <Required>N</Required>
                 </i5>
+                <header_protection_key type="TextField">
+                    <Required>N</Required>
+                    <mask>/^[A-Za-z0-9+\/]{43}=$/</mask>
+                    <ValidationMessage>Header protection key must be a valid 32-byte Base64 key</ValidationMessage>
+                </header_protection_key>
+                <content_padding_addition type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </content_padding_addition>
+                <rekey_after_time type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </rekey_after_time>
+                <rekey_timeout type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </rekey_timeout>
+                <reject_after_time type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </reject_after_time>
+                <keepalive_timeout type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </keepalive_timeout>
+                <max_handshake_attempts type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                </max_handshake_attempts>
+                <random_trailers type="BooleanField">
+                    <Required>N</Required>
+                    <default>0</default>
+                </random_trailers>
+                <disable_cookies type="BooleanField">
+                    <Required>N</Required>
+                    <default>0</default>
+                </disable_cookies>
                 <peer_public_key type="TextField">
                     <Required>Y</Required>
                     <ValidationMessage>Peer public key must be a valid Base64 WireGuard key (44 characters ending with =)</ValidationMessage>
@@ -142,10 +179,10 @@
                     <ValidationMessage>Allowed IPs is required (e.g. 0.0.0.0/0 or 10.0.0.0/8, 192.168.1.0/24)</ValidationMessage>
                     <mask>/^([0-9a-fA-F:\.]+\/\d{1,3})(,\s*[0-9a-fA-F:\.]+\/\d{1,3})*$/</mask>
                 </peer_allowed_ips>
-                <peer_persistent_keepalive type="IntegerField">
+                <peer_persistent_keepalive type="TextField">
                     <Required>N</Required>
-                    <MinimumValue>0</MinimumValue>
-                    <MaximumValue>65535</MaximumValue>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Keepalive must be a number or range from 0 to 65535</ValidationMessage>
                 </peer_persistent_keepalive>
         </instance>
     </items>

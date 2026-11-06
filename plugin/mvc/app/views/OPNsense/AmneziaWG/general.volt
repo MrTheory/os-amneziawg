@@ -280,6 +280,10 @@
                     var fields = ['private_key','address','dns','mtu',
                                   'jc','jmin','jmax','s1','s2','s3','s4','h1','h2','h3','h4',
                                   'i1','i2','i3','i4','i5',
+                                  'header_protection_key','content_padding_addition',
+                                  'rekey_after_time','rekey_timeout','reject_after_time',
+                                  'keepalive_timeout','max_handshake_attempts',
+                                  'random_trailers','disable_cookies',
                                   'peer_public_key','peer_preshared_key','peer_endpoint',
                                   'peer_allowed_ips','peer_persistent_keepalive'];
                     var parsed = {};

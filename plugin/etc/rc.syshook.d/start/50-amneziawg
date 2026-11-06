@@ -35,5 +35,23 @@ fi
 echo "starting amneziawg via service-control..."
 php "$SERVICE_CONTROL" start 2>&1
 
+# The hook can run before DHCP has assigned the WAN address.  awg-quick then
+# creates awgN but cannot finish address/peer setup.  Retry once the configured
+# WAN has an address instead of leaving a partial interface until the watchdog.
+WAN_IF=$(php -r 'require_once("config.inc"); $cfg = OPNsense\Core\Config::getInstance()->object(); echo (string)($cfg->interfaces->wan->if ?? "");' 2>/dev/null)
+(
+    attempt=0
+    while [ "$attempt" -lt 30 ]; do
+        if [ -n "$WAN_IF" ] && ifconfig "$WAN_IF" 2>/dev/null | grep -q '[[:space:]]inet '; then
+            echo "WAN address available on $WAN_IF; reconfiguring AmneziaWG"
+            php "$SERVICE_CONTROL" reconfigure 2>&1
+            exit 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+    echo "WAN address did not appear; watchdog will retry"
+) >> "$LOG" 2>&1 &
+
 echo "=== done: $(date) ==="
 exit 0

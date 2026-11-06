@@ -117,6 +117,15 @@ function awg_get_instances(): array
             'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            'header_protection_key'     => (string)($inst->header_protection_key     ?? ''),
+            'content_padding_addition' => (string)($inst->content_padding_addition ?? ''),
+            'rekey_after_time'          => (string)($inst->rekey_after_time          ?? ''),
+            'rekey_timeout'             => (string)($inst->rekey_timeout             ?? ''),
+            'reject_after_time'         => (string)($inst->reject_after_time         ?? ''),
+            'keepalive_timeout'         => (string)($inst->keepalive_timeout         ?? ''),
+            'max_handshake_attempts'    => (string)($inst->max_handshake_attempts    ?? ''),
+            'random_trailers'           => (string)($inst->random_trailers           ?? ''),
+            'disable_cookies'           => (string)($inst->disable_cookies           ?? ''),
             'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
             'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
             'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
@@ -130,6 +139,20 @@ function awg_get_instances(): array
 function awg_sanitize(string $value): string
 {
     return str_replace(["\n", "\r"], '', $value);
+}
+
+function awg_valid_u16_range(string $value): bool
+{
+    if ($value === '') {
+        return true;
+    }
+    if (!preg_match('/^\d{1,5}(-\d{1,5})?$/', $value)) {
+        return false;
+    }
+    $parts = explode('-', $value, 2);
+    $min = (int)$parts[0];
+    $max = isset($parts[1]) ? (int)$parts[1] : $min;
+    return $min <= 65535 && $max <= 65535 && $min <= $max;
 }
 
 function awg_write_conf(array $inst): string
@@ -154,6 +177,11 @@ function awg_write_conf(array $inst): string
             'i1'=>'I1','i2'=>'I2','i3'=>'I3','i4'=>'I4','i5'=>'I5'];
     // Validate H1-H4: must be >= 5 and ranges must not overlap
     // Supports single values (e.g. "12345") and ranges (e.g. "12345-67890")
+    // A field left at its canonical WireGuard message type (H1=1..H4=4) means
+    // header obfuscation is off. The driver rejects those when set explicitly
+    // (0 already means "unset"), but an omitted Hx produces the very same
+    // on-the-wire header, so they are dropped silently rather than warned about.
+    $hDefaults = ['h1' => 1, 'h2' => 2, 'h3' => 3, 'h4' => 4];
     $hRanges = [];
     foreach (['h1','h2','h3','h4'] as $hk) {
         $raw = trim($inst[$hk] ?? '');
@@ -168,8 +196,13 @@ function awg_write_conf(array $inst): string
         $parts = explode('-', $raw, 2);
         $low  = (float)$parts[0];
         $high = isset($parts[1]) ? (float)$parts[1] : $low;
+        if ($low === $high && (int)$low === $hDefaults[$hk]) {
+            // Header obfuscation off — omitting the key is equivalent.
+            $inst[$hk] = '';
+            continue;
+        }
         if ($low < 5 || $high < 5 || $low > 4294967295 || $high > 4294967295 || $high < $low) {
-            awg_log("WARNING: {$hk}={$raw} is invalid (values must be 5-4294967295, start <= end). Skipping {$hk}.");
+            awg_log("WARNING: {$hk}={$raw} is invalid (must be {$hDefaults[$hk]} for no obfuscation, or 5-4294967295 with start <= end). Skipping {$hk}.");
             $inst[$hk] = '';
             continue;
         }
@@ -190,6 +223,44 @@ function awg_write_conf(array $inst): string
     foreach ($obf as $k => $label) {
         if (!empty($inst[$k])) {
             $lines[] = "$label = " . awg_sanitize($inst[$k]);
+        }
+    }
+
+    if (!empty($inst['header_protection_key'])) {
+        $headerKey = awg_sanitize($inst['header_protection_key']);
+        $decoded = base64_decode($headerKey, true);
+        if ($decoded === false || strlen($decoded) !== 32) {
+            awg_log('WARNING: header_protection_key is not a valid 32-byte Base64 key; skipping');
+        } else {
+            $lines[] = 'HeaderProtectionKey = ' . $headerKey;
+        }
+    }
+    $awg3Ranges = [
+        'content_padding_addition' => 'ContentPaddingAddition',
+        'rekey_after_time' => 'RekeyAfterTime',
+        'rekey_timeout' => 'RekeyTimeout',
+        'reject_after_time' => 'RejectAfterTime',
+        'keepalive_timeout' => 'KeepaliveTimeout',
+        'max_handshake_attempts' => 'MaxHandshakeAttempts',
+    ];
+    foreach ($awg3Ranges as $key => $label) {
+        $value = trim((string)($inst[$key] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        if (!awg_valid_u16_range($value)) {
+            awg_log("WARNING: {$key} has invalid range; skipping");
+            continue;
+        }
+        $lines[] = $label . ' = ' . awg_sanitize($value);
+    }
+    foreach ([
+        'random_trailers' => 'RandomTrailers',
+        'disable_cookies' => 'DisableCookies',
+    ] as $key => $label) {
+        if ((string)($inst[$key] ?? '') !== '') {
+            $lines[] = $label . ' = ' .
+                (((string)$inst[$key] === '1' || strtolower((string)$inst[$key]) === 'on') ? 'on' : 'off');
         }
     }
 
@@ -303,6 +374,10 @@ function awg_up(array $inst): bool
         // block multi-tunnel startup; a no-op for unassigned interfaces.
         exec('/usr/local/sbin/configctl -d interface newip '
             . escapeshellarg($inst['interface']) . ' >/dev/null 2>&1');
+    } else {
+        // awg-quick creates the interface before applying addresses. Remove a
+        // partial interface so boot retry/watchdog can start from a clean state.
+        awg_down($inst);
     }
     return $rc === 0;
 }

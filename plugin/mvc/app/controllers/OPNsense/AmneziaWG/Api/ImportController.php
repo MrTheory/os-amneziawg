@@ -40,6 +40,11 @@ class ImportController extends ApiControllerBase
             's1' => '', 's2' => '', 's3' => '', 's4' => '',
             'h1' => '', 'h2' => '', 'h3' => '', 'h4' => '',
             'i1' => '', 'i2' => '', 'i3' => '', 'i4' => '', 'i5' => '',
+            'header_protection_key' => '', 'content_padding_addition' => '',
+            'rekey_after_time' => '', 'rekey_timeout' => '',
+            'reject_after_time' => '', 'keepalive_timeout' => '',
+            'max_handshake_attempts' => '', 'random_trailers' => '',
+            'disable_cookies' => '',
             'peer_public_key' => '', 'peer_preshared_key' => '',
             'peer_endpoint' => '', 'peer_allowed_ips' => '',
             'peer_persistent_keepalive' => '',
@@ -73,6 +78,15 @@ class ImportController extends ApiControllerBase
                     's1' => 's1', 's2' => 's2', 's3' => 's3', 's4' => 's4',
                     'h1' => 'h1', 'h2' => 'h2', 'h3' => 'h3', 'h4' => 'h4',
                     'i1' => 'i1', 'i2' => 'i2', 'i3' => 'i3', 'i4' => 'i4', 'i5' => 'i5',
+                    'headerprotectionkey' => 'header_protection_key',
+                    'contentpaddingaddition' => 'content_padding_addition',
+                    'rekeyaftertime' => 'rekey_after_time',
+                    'rekeytimeout' => 'rekey_timeout',
+                    'rejectaftertime' => 'reject_after_time',
+                    'keepalivetimeout' => 'keepalive_timeout',
+                    'maxhandshakeattempts' => 'max_handshake_attempts',
+                    'randomtrailers' => 'random_trailers',
+                    'disablecookies' => 'disable_cookies',
                 ];
                 if (isset($map[$k])) {
                     // I1-I5 CPS tags contain angle brackets (e.g. <b 0xd1><r 50>)
