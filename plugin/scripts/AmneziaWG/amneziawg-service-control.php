@@ -64,6 +64,47 @@ function awg_clear_instance_stopped_flags(): void
     }
 }
 
+// AWG 3.x [Interface] keys that take a number or a range ("25" / "20-30"):
+// model field => config key. Shared by the config writer and awg_uses_v3().
+const AWG_V3_RANGE_KEYS = [
+    'content_padding_addition' => 'ContentPaddingAddition',
+    'rekey_after_time'         => 'RekeyAfterTime',
+    'rekey_timeout'            => 'RekeyTimeout',
+    'reject_after_time'        => 'RejectAfterTime',
+    'keepalive_timeout'        => 'KeepaliveTimeout',
+    'max_handshake_attempts'   => 'MaxHandshakeAttempts',
+];
+
+// True when the instance sets anything beyond the AWG 2.0 parameter set.
+// Such a config is rejected by amnezia-tools / amnezia-kmod older than 3.x.
+function awg_uses_v3(array $inst): bool
+{
+    if (($inst['header_protection_key'] ?? '') !== ''
+        || ($inst['random_trailers'] ?? '') === '1'
+        || ($inst['disable_cookies'] ?? '') === '1'
+        || strpos((string)($inst['peer_persistent_keepalive'] ?? ''), '-') !== false) {
+        return true;
+    }
+    foreach (AWG_V3_RANGE_KEYS as $k => $label) {
+        if (!empty($inst[$k])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Major version of the installed amnezia-tools ("awg --version" prints
+// e.g. "wireguard-tools v3.1.20260812 - ..."), or null when unknown.
+function awg_tools_major(): ?int
+{
+    static $major = false;
+    if ($major === false) {
+        $out = (string)shell_exec(AWG_BIN . ' --version 2>/dev/null');
+        $major = preg_match('/v(\d+)\.\d+\.\d+/', $out, $m) ? (int)$m[1] : null;
+    }
+    return $major;
+}
+
 function awg_get_instances(): array
 {
     $config = OPNsense\Core\Config::getInstance()->object();
@@ -117,6 +158,16 @@ function awg_get_instances(): array
             'i3'                        => html_entity_decode(html_entity_decode((string)($inst->i3 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'i4'                        => html_entity_decode(html_entity_decode((string)($inst->i4 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             'i5'                        => html_entity_decode(html_entity_decode((string)($inst->i5 ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            // AWG 3.x (optional; empty on 2.0 tunnels)
+            'header_protection_key'     => (string)($inst->header_protection_key     ?? ''),
+            'content_padding_addition'  => (string)($inst->content_padding_addition  ?? ''),
+            'random_trailers'           => (string)($inst->random_trailers           ?? ''),
+            'disable_cookies'           => (string)($inst->disable_cookies           ?? ''),
+            'rekey_after_time'          => (string)($inst->rekey_after_time          ?? ''),
+            'rekey_timeout'             => (string)($inst->rekey_timeout             ?? ''),
+            'reject_after_time'         => (string)($inst->reject_after_time         ?? ''),
+            'keepalive_timeout'         => (string)($inst->keepalive_timeout         ?? ''),
+            'max_handshake_attempts'    => (string)($inst->max_handshake_attempts    ?? ''),
             'peer_public_key'           => (string)($inst->peer_public_key           ?? ''),
             'peer_preshared_key'        => (string)($inst->peer_preshared_key        ?? ''),
             'peer_endpoint'             => (string)($inst->peer_endpoint             ?? ''),
@@ -160,6 +211,13 @@ function awg_write_conf(array $inst): string
         if ($raw === '') {
             continue;
         }
+        // AWG 3.x servers with header protection keep the stock WireGuard
+        // message types (H1=1, H2=2, H3=3, H4=4). That is the driver default:
+        // it rejects them when set explicitly, so just leave the line out.
+        if ($raw === substr($hk, 1)) {
+            $inst[$hk] = '';
+            continue;
+        }
         if (!preg_match('/^\d{1,10}(-\d{1,10})?$/', $raw)) {
             awg_log("WARNING: {$hk}={$raw} has invalid format. Skipping {$hk}.");
             $inst[$hk] = '';
@@ -191,6 +249,31 @@ function awg_write_conf(array $inst): string
         if (!empty($inst[$k])) {
             $lines[] = "$label = " . awg_sanitize($inst[$k]);
         }
+    }
+
+    // AWG 3.x parameters. Emitted only when set, so a tunnel without them
+    // gets exactly the same config as before (AWG 2.0 compatibility).
+    if (($inst['header_protection_key'] ?? '') !== '') {
+        // The kernel uses the S1-S4 padding as the cipher nonce and rejects
+        // the whole config (EINVAL) when any of them is shorter than 12 bytes
+        foreach (['s1', 's2', 's3', 's4'] as $sk) {
+            if ((int)($inst[$sk] ?? 0) < 12) {
+                awg_log('WARNING: ' . $inst['interface'] . ': HeaderProtectionKey requires S1-S4 >= 12, but '
+                    . strtoupper($sk) . '=' . (int)($inst[$sk] ?? 0) . ' — the tunnel will fail to start');
+            }
+        }
+        $lines[] = 'HeaderProtectionKey = ' . awg_sanitize($inst['header_protection_key']);
+    }
+    foreach (AWG_V3_RANGE_KEYS as $k => $label) {
+        if (!empty($inst[$k])) {
+            $lines[] = "$label = " . awg_sanitize($inst[$k]);
+        }
+    }
+    if (($inst['random_trailers'] ?? '') === '1') {
+        $lines[] = 'RandomTrailers = on';
+    }
+    if (($inst['disable_cookies'] ?? '') === '1') {
+        $lines[] = 'DisableCookies = on';
     }
 
     $lines[] = '';
@@ -293,8 +376,26 @@ function awg_up(array $inst): bool
         awg_log('ERROR: failed to write config for ' . $inst['interface'] . ', skipping up');
         return false;
     }
+    // AWG 3.x parameters need amnezia-tools/amnezia-kmod 3.x: older tools
+    // abort on the unknown config key with a cryptic parse error. Fail early
+    // with an actionable message instead. 2.0-only tunnels are not affected.
+    $usesV3 = awg_uses_v3($inst);
+    if ($usesV3) {
+        $toolsMajor = awg_tools_major();
+        if ($toolsMajor !== null && $toolsMajor < 3) {
+            awg_log('ERROR: ' . $inst['interface'] . ' uses AmneziaWG 3.x parameters, but the installed'
+                . ' amnezia-tools is ' . $toolsMajor . '.x. Upgrade amnezia-kmod and amnezia-tools to 3.1+'
+                . ' (re-run install.sh) or clear the 3.x fields. Skipping up.');
+            return false;
+        }
+    }
     [$output, $rc] = awg_exec_timeout(AWG_QUICK . ' up ' . escapeshellarg($path) . ' 2>&1', 30);
     awg_log('up ' . $inst['interface'] . ' rc=' . $rc . ' | ' . $output);
+    if ($rc !== 0 && $usesV3) {
+        awg_log('HINT: ' . $inst['interface'] . ' uses AmneziaWG 3.x parameters — they require amnezia-kmod'
+            . ' 3.1+ and amnezia-tools 3.1+ (check: pkg info amnezia-kmod amnezia-tools; a kmod upgrade'
+            . ' needs a reboot to load the new module)');
+    }
     if ($rc === 0) {
         // awg-quick recreates the interface, wiping OPNsense state tied to it
         // (gateway monitor host-routes, dpinger). Fire rc.newwanip so the system
