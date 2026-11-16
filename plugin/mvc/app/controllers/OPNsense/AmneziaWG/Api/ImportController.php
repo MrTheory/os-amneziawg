@@ -40,10 +40,22 @@ class ImportController extends ApiControllerBase
             's1' => '', 's2' => '', 's3' => '', 's4' => '',
             'h1' => '', 'h2' => '', 'h3' => '', 'h4' => '',
             'i1' => '', 'i2' => '', 'i3' => '', 'i4' => '', 'i5' => '',
+            // AWG 3.x
+            'header_protection_key' => '', 'content_padding_addition' => '',
+            'random_trailers' => '', 'disable_cookies' => '',
+            'rekey_after_time' => '', 'rekey_timeout' => '', 'reject_after_time' => '',
+            'keepalive_timeout' => '', 'max_handshake_attempts' => '',
             'peer_public_key' => '', 'peer_preshared_key' => '',
             'peer_endpoint' => '', 'peer_allowed_ips' => '',
             'peer_persistent_keepalive' => '',
         ];
+
+        // A .conf saved by some text editors starts with a UTF-8 BOM: without
+        // stripping it the first line never matches '[Interface]' and the
+        // whole section is lost
+        if (strncmp($raw, "\xEF\xBB\xBF", 3) === 0) {
+            $raw = substr($raw, 3);
+        }
 
         $section = '';
         foreach (explode("\n", $raw) as $line) {
@@ -73,8 +85,23 @@ class ImportController extends ApiControllerBase
                     's1' => 's1', 's2' => 's2', 's3' => 's3', 's4' => 's4',
                     'h1' => 'h1', 'h2' => 'h2', 'h3' => 'h3', 'h4' => 'h4',
                     'i1' => 'i1', 'i2' => 'i2', 'i3' => 'i3', 'i4' => 'i4', 'i5' => 'i5',
+                    // AWG 3.x
+                    'headerprotectionkey'    => 'header_protection_key',
+                    'contentpaddingaddition' => 'content_padding_addition',
+                    'randomtrailers'         => 'random_trailers',
+                    'disablecookies'         => 'disable_cookies',
+                    'rekeyaftertime'         => 'rekey_after_time',
+                    'rekeytimeout'           => 'rekey_timeout',
+                    'rejectaftertime'        => 'reject_after_time',
+                    'keepalivetimeout'       => 'keepalive_timeout',
+                    'maxhandshakeattempts'   => 'max_handshake_attempts',
                 ];
-                if (isset($map[$k])) {
+                if (isset($map[$k]) && in_array($map[$k], ['random_trailers', 'disable_cookies'], true)) {
+                    // Booleans: awg accepts on/off or a number; normalise to the
+                    // model's 1/0 so the dialog checkbox can be set from it
+                    $v = strtolower($value);
+                    $data[$map[$k]] = ($v === 'on' || $v === 'true' || (ctype_digit($v) && (int)$v !== 0)) ? '1' : '0';
+                } elseif (isset($map[$k])) {
                     // I1-I5 CPS tags contain angle brackets (e.g. <b 0xd1><r 50>)
                     // which get double-encoded by Phalcon's 'string' POST filter —
                     // decode twice to restore raw tag syntax.

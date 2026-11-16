@@ -110,6 +110,7 @@ class InstanceController extends ApiMutableModelControllerBase
 
         $validations = array_merge(
             $this->validateHFields($body, 'instance'),
+            $this->validateV3Fields($body, 'instance'),
             $this->validateInterfaceNumber($body, null)
         );
         if (!empty($validations)) {
@@ -151,6 +152,7 @@ class InstanceController extends ApiMutableModelControllerBase
 
         $validations = array_merge(
             $this->validateHFields($body, 'instance'),
+            $this->validateV3Fields($body, 'instance'),
             $this->validateInterfaceNumber($body, (string)$uuid)
         );
         if (!empty($validations)) {
@@ -270,6 +272,12 @@ class InstanceController extends ApiMutableModelControllerBase
             if ($val === '') {
                 continue;
             }
+            // Stock WireGuard message type for this slot (H1=1 ... H4=4) is the
+            // driver default — AWG 3.x configs with header protection use it.
+            // Accepted here; the config writer omits it (same as empty).
+            if ($val === substr($hf, 1)) {
+                continue;
+            }
             if (!preg_match('/^\d{1,10}(-\d{1,10})?$/', $val)) {
                 $validationErrors["{$prefix}.{$hf}"] = strtoupper($hf) . ' must be a number or range (e.g. 12345 or 12345-67890)';
                 continue;
@@ -278,7 +286,7 @@ class InstanceController extends ApiMutableModelControllerBase
             $low  = (float)$parts[0];
             $high = isset($parts[1]) ? (float)$parts[1] : $low;
             if ($low < 5 || $high < 5 || $low > 4294967295 || $high > 4294967295) {
-                $validationErrors["{$prefix}.{$hf}"] = strtoupper($hf) . ' values must be in range 5-4294967295 (values 1-4 are reserved)';
+                $validationErrors["{$prefix}.{$hf}"] = strtoupper($hf) . ' values must be in range 5-4294967295 (1-4 are reserved; only the default ' . strtoupper($hf) . '=' . substr($hf, 1) . ' is accepted)';
             } elseif ($high < $low) {
                 $validationErrors["{$prefix}.{$hf}"] = strtoupper($hf) . ' range start must not exceed range end';
             } else {
@@ -290,6 +298,52 @@ class InstanceController extends ApiMutableModelControllerBase
                 }
                 if (!isset($validationErrors["{$prefix}.{$hf}"])) {
                     $hRanges[$hf] = [$low, $high];
+                }
+            }
+        }
+        return $validationErrors;
+    }
+
+    /**
+     * Validate AWG 3.x fields beyond what the model masks can express:
+     * ranges must be start <= end within uint16 (the awg driver stores them
+     * as 16-bit), and a header protection key needs S1-S4 >= 12 because the
+     * padding doubles as the cipher nonce (the kernel rejects the config
+     * otherwise). All fields are optional — an AWG 2.0 tunnel leaves them empty.
+     */
+    private function validateV3Fields(array $body, string $prefix): array
+    {
+        $validationErrors = [];
+        $rangeFields = [
+            'content_padding_addition'  => 'Content padding addition',
+            'rekey_after_time'          => 'Rekey after time',
+            'rekey_timeout'             => 'Rekey timeout',
+            'reject_after_time'         => 'Reject after time',
+            'keepalive_timeout'         => 'Keepalive timeout',
+            'max_handshake_attempts'    => 'Max handshake attempts',
+            'peer_persistent_keepalive' => 'Keepalive',
+        ];
+        foreach ($rangeFields as $field => $label) {
+            $val = trim($body[$field] ?? '');
+            if ($val === '' || !preg_match('/^\d{1,5}(-\d{1,5})?$/', $val)) {
+                continue; // empty is fine; a malformed value is reported by the model mask
+            }
+            $parts = explode('-', $val, 2);
+            $low  = (int)$parts[0];
+            $high = isset($parts[1]) ? (int)$parts[1] : $low;
+            if ($low > 65535 || $high > 65535) {
+                $validationErrors["{$prefix}.{$field}"] = $label . ' values must be in range 0-65535';
+            } elseif ($high < $low) {
+                $validationErrors["{$prefix}.{$field}"] = $label . ' range start must not exceed range end';
+            }
+        }
+
+        if (trim($body['header_protection_key'] ?? '') !== '') {
+            foreach (['s1', 's2', 's3', 's4'] as $sf) {
+                $val = trim($body[$sf] ?? '');
+                if ($val === '' || !ctype_digit($val) || (int)$val < 12) {
+                    $validationErrors["{$prefix}.{$sf}"] = strtoupper($sf)
+                        . ' must be at least 12 when Header Protection Key is set';
                 }
             }
         }
