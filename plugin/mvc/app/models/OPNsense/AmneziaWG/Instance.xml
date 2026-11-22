@@ -122,6 +122,50 @@
                 <i5 type="TextField">
                     <Required>N</Required>
                 </i5>
+                <!-- AWG 3.x: all optional; an instance without them stays a plain AWG 2.0 tunnel -->
+                <header_protection_key type="TextField">
+                    <Required>N</Required>
+                    <ValidationMessage>Header protection key must be a valid Base64 key (44 characters ending with =)</ValidationMessage>
+                    <mask>/^([A-Za-z0-9+\/]{43}=)?$/</mask>
+                </header_protection_key>
+                <content_padding_addition type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Content padding addition must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </content_padding_addition>
+                <random_trailers type="BooleanField">
+                    <default>0</default>
+                    <Required>N</Required>
+                </random_trailers>
+                <disable_cookies type="BooleanField">
+                    <default>0</default>
+                    <Required>N</Required>
+                </disable_cookies>
+                <rekey_after_time type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Rekey after time must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </rekey_after_time>
+                <rekey_timeout type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Rekey timeout must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </rekey_timeout>
+                <reject_after_time type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Reject after time must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </reject_after_time>
+                <keepalive_timeout type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Keepalive timeout must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </keepalive_timeout>
+                <max_handshake_attempts type="TextField">
+                    <Required>N</Required>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Max handshake attempts must be a number or range (e.g. 25 or 20-30), values 0-65535</ValidationMessage>
+                </max_handshake_attempts>
                 <peer_public_key type="TextField">
                     <Required>Y</Required>
                     <ValidationMessage>Peer public key must be a valid Base64 WireGuard key (44 characters ending with =)</ValidationMessage>
@@ -142,10 +186,11 @@
                     <ValidationMessage>Allowed IPs is required (e.g. 0.0.0.0/0 or 10.0.0.0/8, 192.168.1.0/24)</ValidationMessage>
                     <mask>/^([0-9a-fA-F:\.]+\/\d{1,3})(,\s*[0-9a-fA-F:\.]+\/\d{1,3})*$/</mask>
                 </peer_allowed_ips>
-                <peer_persistent_keepalive type="IntegerField">
+                <!-- AWG 3.x accepts a range here (e.g. 22-30); a plain number stays valid for 2.0 -->
+                <peer_persistent_keepalive type="TextField">
                     <Required>N</Required>
-                    <MinimumValue>0</MinimumValue>
-                    <MaximumValue>65535</MaximumValue>
+                    <mask>/^\d{1,5}(-\d{1,5})?$/</mask>
+                    <ValidationMessage>Keepalive must be a number or range (e.g. 25 or 22-30), values 0-65535</ValidationMessage>
                 </peer_persistent_keepalive>
         </instance>
     </items>

@@ -244,6 +244,91 @@
     </field>
     <field>
         <type>header</type>
+        <label>AmneziaWG 3.x Parameters (optional)</label>
+    </field>
+    <field>
+        <id>instance.header_protection_key</id>
+        <label>Header Protection Key</label>
+        <type>text</type>
+        <help>AWG 3.0+: Base64 key that encrypts packet header fields. Must match the server. Requires S1-S4 of at least 12. Leave empty for an AWG 2.0 server. Needs amnezia-kmod / amnezia-tools 3.1+.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.content_padding_addition</id>
+        <label>Content Padding Addition</label>
+        <type>text</type>
+        <help>AWG 3.0+: random extra padding for transport packets — number or range (e.g. 0-64), values 0-65535. Set the same on both sides.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.random_trailers</id>
+        <label>Random Trailers</label>
+        <type>checkbox</type>
+        <help>AWG 3.1+: append a random-length trailer to every packet. Must be enabled on both sides, otherwise the handshake fails.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.disable_cookies</id>
+        <label>Disable Cookies</label>
+        <type>checkbox</type>
+        <help>AWG 3.1+: never send cookie replies (hides a WireGuard fingerprint from active probing). Also disables handshake flood protection.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.rekey_after_time</id>
+        <label>Rekey After Time</label>
+        <type>text</type>
+        <help>AWG 3.0+: seconds before a new handshake is started — number or range (e.g. 100-140). Empty = WireGuard default (120).</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.rekey_timeout</id>
+        <label>Rekey Timeout</label>
+        <type>text</type>
+        <help>AWG 3.0+: seconds before an unanswered handshake is retried — number or range. Empty = WireGuard default (5).</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.reject_after_time</id>
+        <label>Reject After Time</label>
+        <type>text</type>
+        <help>AWG 3.0+: seconds after which the session key is rejected — number or range. Empty = WireGuard default (180).</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.keepalive_timeout</id>
+        <label>Keepalive Timeout</label>
+        <type>text</type>
+        <help>AWG 3.0+: seconds of send silence before a keepalive is sent — number or range. Empty = WireGuard default (10).</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>instance.max_handshake_attempts</id>
+        <label>Max Handshake Attempts</label>
+        <type>text</type>
+        <help>AWG 3.0+: handshake retries before giving up — number or range. Empty = WireGuard default.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <type>header</type>
         <label>Peer (Server)</label>
     </field>
     <field>
@@ -277,7 +362,7 @@
         <id>instance.peer_persistent_keepalive</id>
         <label>Keepalive</label>
         <type>text</type>
-        <help>Send keepalive every N seconds (e.g. 25). Required when behind NAT.</help>
+        <help>Send keepalive every N seconds (e.g. 25). Required when behind NAT. AWG 3.0+ also accepts a range (e.g. 22-30).</help>
         <grid_view>
             <ignore>true</ignore>
         </grid_view>

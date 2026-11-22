@@ -183,6 +183,18 @@ PersistentKeepalive = 25
 
 ⚠️ AWG 2.0 параметры (S3, S4, диапазоны H1-H4 вида `12345-67890`, I1-I5) поддерживаются начиная с `amnezia-kmod 2.0.x` и плагина версии 2.7.0+. Если у тебя `amnezia-kmod 1.x` — в `.conf` этих параметров быть не должно.
 
+**Сервер AWG 3.x.** Конфиг от сервера AmneziaWG 3.0/3.1 содержит те же параметры плюс дополнительные строки в `[Interface]`, например:
+
+```ini
+HeaderProtectionKey = <Base64-ключ>   # AWG 3.0+, требует S1-S4 >= 12
+ContentPaddingAddition = 0-64         # AWG 3.0+
+RandomTrailers = on                   # AWG 3.1+
+DisableCookies = on                   # AWG 3.1+
+RekeyAfterTime = 100-140              # AWG 3.0+, тайминги: число или диапазон
+```
+
+а `PersistentKeepalive` может быть диапазоном (`22-30`). Такие конфиги поддерживаются плагином с версии 3.1.0 и требуют `amnezia-kmod` 3.1+ и `amnezia-tools` 3.1+ (FreeBSD quarterly с 2026Q4; `install.sh` предложит обновление). Для сервера AWG 2.0 этих строк в конфиге нет — ничего дополнительно делать не нужно.
+
 ---
 
 ## 6. Резервная копия конфигурации OPNsense

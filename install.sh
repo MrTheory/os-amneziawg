@@ -9,7 +9,7 @@
 set -e
 set -u
 
-PLUGIN_VERSION="3.0.0"
+PLUGIN_VERSION="3.1.0"
 PLUGIN_DIR="$(dirname "$0")/plugin"
 VERSION_FILE="/usr/local/opnsense/mvc/app/models/OPNsense/AmneziaWG/version.txt"
 
@@ -342,6 +342,96 @@ else
                 echo "[OK]  amnezia-kmod locked (prevents accidental upgrade)" || true
         fi
     fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AmneziaWG 3.x PACKAGE CHECK
+# AWG 3.x tunnel parameters (HeaderProtectionKey, ContentPaddingAddition,
+# RandomTrailers, DisableCookies, timers) need amnezia-kmod 3.1+ and
+# amnezia-tools 3.1+. 2.x packages keep working for AWG 2.0 tunnels, so the
+# upgrade is optional and defaults to "no": it replaces a kernel module.
+# ─────────────────────────────────────────────────────────────────────────────
+# True (0) for a non-empty package version below 3.x
+is_pre_v3() {
+    case "$1" in
+        "")                  return 1 ;;
+        [3-9].*)             return 1 ;;
+        [1-9][0-9]*)         return 1 ;;
+        *)                   return 0 ;;
+    esac
+}
+
+_TOOLS_VER=$(pkg query '%v' amnezia-tools 2>/dev/null || echo "")
+_KMOD_VER=$(pkg query '%v' amnezia-kmod 2>/dev/null || echo "")
+
+if is_pre_v3 "$_TOOLS_VER" || is_pre_v3 "$_KMOD_VER"; then
+    echo ""
+    echo "  Installed packages support AmneziaWG 2.0 only:"
+    echo "    amnezia-kmod  ${_KMOD_VER:-not installed}"
+    echo "    amnezia-tools ${_TOOLS_VER:-not installed}"
+    echo "  AmneziaWG 3.x tunnel parameters need amnezia-kmod 3.1+ and amnezia-tools 3.1+."
+    echo "  Existing AWG 2.0 tunnels work with either version."
+    echo ""
+    printf "  Upgrade both packages from FreeBSD quarterly repo? [y/N] "
+    read -r _UPG < /dev/tty 2>/dev/null || _UPG="n"
+    case "$_UPG" in
+        [yY]*)
+            setup_freebsd_repo
+
+            # Lock pkg to prevent self-upgrade from quarterly repo (causes segfault)
+            UPG_PKG_LOCKED_BY_US=0
+            if pkg lock -qy pkg 2>/dev/null; then
+                UPG_PKG_LOCKED_BY_US=1
+            fi
+
+            pkg update -r FreeBSD-quarterly 2>/dev/null || warn "pkg update failed — trying upgrade anyway"
+
+            # kmod is locked by previous installs — unlock for the dry-run and upgrade
+            pkg unlock -qy amnezia-kmod 2>/dev/null || true
+
+            if check_kernel_compat; then
+                echo "  Upgrading amnezia-kmod and amnezia-tools..."
+                if pkg install -y -r FreeBSD-quarterly amnezia-kmod amnezia-tools 2>/dev/null; then
+                    _TOOLS_VER=$(pkg query '%v' amnezia-tools 2>/dev/null || echo "")
+                    _KMOD_VER=$(pkg query '%v' amnezia-kmod 2>/dev/null || echo "")
+                    echo "[OK]  amnezia-kmod ${_KMOD_VER}, amnezia-tools ${_TOOLS_VER}"
+                    if is_pre_v3 "$_TOOLS_VER" || is_pre_v3 "$_KMOD_VER"; then
+                        warn "FreeBSD quarterly has no 3.x packages for this ABI yet — AWG 3.x parameters stay unavailable."
+                    else
+                        echo ""
+                        warn "The running kernel still has the OLD if_amn module loaded."
+                        warn "REBOOT the firewall to load amnezia-kmod ${_KMOD_VER} before using AWG 3.x parameters."
+                    fi
+                else
+                    warn "Package upgrade failed. Try manually:"
+                    echo "       pkg unlock amnezia-kmod"
+                    echo "       pkg install -r FreeBSD-quarterly amnezia-kmod amnezia-tools"
+                fi
+            else
+                warn "Skipping package upgrade due to ABI mismatch."
+            fi
+
+            # Re-lock kmod whatever the outcome
+            pkg lock -qy amnezia-kmod 2>/dev/null || true
+
+            cleanup_freebsd_repo
+
+            if [ "$UPG_PKG_LOCKED_BY_US" = "1" ]; then
+                pkg unlock -qy pkg 2>/dev/null || true
+            fi
+
+            # Verify pkg wasn't corrupted despite the lock
+            if ! pkg info pkg >/dev/null 2>&1; then
+                warn "pkg was corrupted during upgrade — restoring..."
+                pkg-static install -fy pkg 2>/dev/null || true
+                pkg-static update -f 2>/dev/null || true
+            fi
+            ;;
+        *)
+            echo "  Keeping current packages. AWG 3.x fields in the GUI will not work until"
+            echo "  amnezia-kmod and amnezia-tools are upgraded to 3.1+ (re-run install.sh)."
+            ;;
+    esac
 fi
 
 # Final binary check

@@ -111,6 +111,17 @@
             }
         );
 
+        // Set a dialog field from imported data; checkboxes (AWG 3.x flags)
+        // take '1'/'0' and need .prop('checked') instead of .val()
+        function setInstanceField(f, value) {
+            var $el = $('[id="instance.' + f + '"]');
+            if ($el.is(':checkbox')) {
+                $el.prop('checked', value === '1');
+            } else {
+                $el.val(value);
+            }
+        }
+
         // Dialog post-load hooks: decode CPS fields, inject pending import data
         $('#{{formGridInstance['edit_dialog_id']}}').on('shown.bs.modal', function () {
             if (window._awgImportData) {
@@ -118,7 +129,7 @@
                 window._awgImportData = null;
                 Object.keys(data).forEach(function (f) {
                     if (data[f] !== undefined && data[f] !== '') {
-                        $('[id="instance.' + f + '"]').val(data[f]);
+                        setInstanceField(f, data[f]);
                     }
                 });
             }
@@ -280,6 +291,10 @@
                     var fields = ['private_key','address','dns','mtu',
                                   'jc','jmin','jmax','s1','s2','s3','s4','h1','h2','h3','h4',
                                   'i1','i2','i3','i4','i5',
+                                  'header_protection_key','content_padding_addition',
+                                  'random_trailers','disable_cookies',
+                                  'rekey_after_time','rekey_timeout','reject_after_time',
+                                  'keepalive_timeout','max_handshake_attempts',
                                   'peer_public_key','peer_preshared_key','peer_endpoint',
                                   'peer_allowed_ips','peer_persistent_keepalive'];
                     var parsed = {};
@@ -292,7 +307,7 @@
                     if ($('#{{formGridInstance['edit_dialog_id']}}').hasClass('in')) {
                         // Dialog already open — fill fields directly
                         Object.keys(parsed).forEach(function (f) {
-                            $('[id="instance.' + f + '"]').val(parsed[f]);
+                            setInstanceField(f, parsed[f]);
                         });
                         decodeIFields();
                     } else {
